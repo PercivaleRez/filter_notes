@@ -2,14 +2,16 @@ import numpy
 import soundfile
 from pathlib import Path
 
-# yapf: disable
+# fmt: off
 def PTRTri0(phi, T):
     n = phi / T
-    return 4*T*n-1
+    if n >= 0.0:
+        return 4*T*n-1
+    return 0  # Just in case.
 
 def PTRTri1(phi, T):
     n = phi / T
-    if n >= 0.0:
+    if n >= 1.0:
         return 4*T*n-2*T-1
     if 0.0 <= n and n < 1.0:
         return 4*T*n**2-4*T*n+2*T-1
@@ -17,7 +19,7 @@ def PTRTri1(phi, T):
 
 def PTRTri2(phi, T):
     n = phi / T
-    if n >= 1.0:
+    if n >= 2.0:
         return 4*T*n-4*T-1
     if 0.0 <= n and n < 1.0:
         return (4*T*n**3)/3-4*T*n+4*T-1
@@ -27,7 +29,7 @@ def PTRTri2(phi, T):
 
 def PTRTri3(phi, T):
     n = phi / T
-    if n >= 2.0:
+    if n >= 3.0:
         return 4*T*n-6*T-1
     if 0.0 <= n and n < 1.0:
         return (T*n**4)/3-4*T*n+6*T-1
@@ -39,7 +41,7 @@ def PTRTri3(phi, T):
 
 def PTRTri4(phi, T):
     n = phi / T
-    if n >= 3.0:
+    if n >= 4.0:
         return 4*T*n-8*T-1
     if 0.0 <= n and n < 1.0:
         return (T*n**5)/15-4*T*n+8*T-1
@@ -53,7 +55,7 @@ def PTRTri4(phi, T):
 
 def PTRTri5(phi, T):
     n = phi / T
-    if n >= 4.0:
+    if n >= 5.0:
         return 4*T*n-10*T-1
     if 0.0 <= n and n < 1.0:
         return (T*n**6)/90-4*T*n+10*T-1
@@ -69,7 +71,7 @@ def PTRTri5(phi, T):
 
 def PTRTri6(phi, T):
     n = phi / T
-    if n >= 5.0:
+    if n >= 6.0:
         return 4*T*n-12*T-1
     if 0.0 <= n and n < 1.0:
         return (T*n**7)/630-4*T*n+12*T-1
@@ -87,7 +89,7 @@ def PTRTri6(phi, T):
 
 def PTRTri7(phi, T):
     n = phi / T
-    if n >= 6.0:
+    if n >= 7.0:
         return 4*T*n-14*T-1
     if 0.0 <= n and n < 1.0:
         return (T*n**8)/5040-4*T*n+14*T-1
@@ -107,7 +109,7 @@ def PTRTri7(phi, T):
 
 def PTRTri8(phi, T):
     n = phi / T
-    if n >= 7.0:
+    if n >= 8.0:
         return 4*T*n-16*T-1
     if 0.0 <= n and n < 1.0:
         return (T*n**9)/45360-4*T*n+16*T-1
@@ -129,7 +131,7 @@ def PTRTri8(phi, T):
 
 def PTRTri9(phi, T):
     n = phi / T
-    if n >= 8.0:
+    if n >= 9.0:
         return 4*T*n-18*T-1
     if 0.0 <= n and n < 1.0:
         return (T*n**10)/453600-4*T*n+18*T-1
@@ -153,7 +155,7 @@ def PTRTri9(phi, T):
 
 def PTRTri10(phi, T):
     n = phi / T
-    if n >= 9.0:
+    if n >= 10.0:
         return 4*T*n-20*T-1
     if 0.0 <= n and n < 1.0:
         return (T*n**11)/4989600-4*T*n+20*T-1
@@ -176,7 +178,8 @@ def PTRTri10(phi, T):
     if 9.0 <= n and n < 10.0:
         return -(T*n**11)/4989600+(T*n**10)/45360-(5*T*n**9)/4536+(25*T*n**8)/756-(125*T*n**7)/189+(250*T*n**6)/27-(2500*T*n**5)/27+(125000*T*n**4)/189-(625000*T*n**3)/189+(6250000*T*n**2)/567-(12497732*T*n)/567+(124875260*T)/6237-1
     return 0  # Just in case.
-# yapf: enable
+# fmt: on
+
 
 class PTROscillator:
     def __init__(self, ptr_func, samplerate, frequency):
@@ -201,6 +204,7 @@ class PTROscillator:
             return self.ptr_func(self.phi, self.T)
         return -self.ptr_func(self.phi - 0.5, self.T)
 
+
 def render():
     samplerate = 44100
     frequency = 1000
@@ -224,5 +228,6 @@ def render():
             samplerate,
             subtype="FLOAT",
         )
+
 
 render()

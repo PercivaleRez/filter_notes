@@ -2,22 +2,22 @@ import numpy
 import soundfile
 from pathlib import Path
 
-# yapf: disable
+# fmt: off
 def PTRRamp0(phi, T):
     n = phi / T
     return 2*T*n
 
 def PTRRamp1(phi, T):
     n = phi / T
-    if n >= 0.0:
+    if n >= 1.0:
         return 2*T*n-T
     if 0.0 <= n and n < 1.0:
-        return n**2+T
+        return +T
     return 0  # Just in case.
 
 def PTRRamp2(phi, T):
     n = phi / T
-    if n >= 1.0:
+    if n >= 2.0:
         return 2*T*n-2*T
     if 0.0 <= n and n < 1.0:
         return (T*n**3)/3
@@ -27,7 +27,7 @@ def PTRRamp2(phi, T):
 
 def PTRRamp3(phi, T):
     n = phi / T
-    if n >= 2.0:
+    if n >= 3.0:
         return 2*T*n-3*T
     if 0.0 <= n and n < 1.0:
         return (T*n**4)/12
@@ -39,7 +39,7 @@ def PTRRamp3(phi, T):
 
 def PTRRamp4(phi, T):
     n = phi / T
-    if n >= 3.0:
+    if n >= 4.0:
         return 2*T*n-4*T
     if 0.0 <= n and n < 1.0:
         return (T*n**5)/60
@@ -53,7 +53,7 @@ def PTRRamp4(phi, T):
 
 def PTRRamp5(phi, T):
     n = phi / T
-    if n >= 4.0:
+    if n >= 5.0:
         return 2*T*n-5*T
     if 0.0 <= n and n < 1.0:
         return (T*n**6)/360
@@ -69,7 +69,7 @@ def PTRRamp5(phi, T):
 
 def PTRRamp6(phi, T):
     n = phi / T
-    if n >= 5.0:
+    if n >= 6.0:
         return 2*T*n-6*T
     if 0.0 <= n and n < 1.0:
         return (T*n**7)/2520
@@ -87,7 +87,7 @@ def PTRRamp6(phi, T):
 
 def PTRRamp7(phi, T):
     n = phi / T
-    if n >= 6.0:
+    if n >= 7.0:
         return 2*T*n-7*T
     if 0.0 <= n and n < 1.0:
         return (T*n**8)/20160
@@ -107,7 +107,7 @@ def PTRRamp7(phi, T):
 
 def PTRRamp8(phi, T):
     n = phi / T
-    if n >= 7.0:
+    if n >= 8.0:
         return 2*T*n-8*T
     if 0.0 <= n and n < 1.0:
         return (T*n**9)/181440
@@ -129,7 +129,7 @@ def PTRRamp8(phi, T):
 
 def PTRRamp9(phi, T):
     n = phi / T
-    if n >= 8.0:
+    if n >= 9.0:
         return 2*T*n-9*T
     if 0.0 <= n and n < 1.0:
         return (T*n**10)/1814400
@@ -153,7 +153,7 @@ def PTRRamp9(phi, T):
 
 def PTRRamp10(phi, T):
     n = phi / T
-    if n >= 9.0:
+    if n >= 10.0:
         return 2*T*n-10*T
     if 0.0 <= n and n < 1.0:
         return (T*n**11)/19958400
@@ -176,7 +176,8 @@ def PTRRamp10(phi, T):
     if 9.0 <= n and n < 10.0:
         return -(T*n**11)/19958400+(T*n**10)/181440-(5*T*n**9)/18144+(25*T*n**8)/3024-(125*T*n**7)/756+(125*T*n**6)/54-(625*T*n**5)/27+(31250*T*n**4)/189-(156250*T*n**3)/189+(1562500*T*n**2)/567-(3123866*T*n)/567+(31187630*T)/6237
     return 0  # Just in case.
-# yapf: enable
+# fmt: on
+
 
 class PTROscillator:
     def __init__(self, ptr_func, order, samplerate, frequency):
@@ -208,6 +209,7 @@ class PTROscillator:
             return self.dc - self.ptr_func(self.phi - 0.5, self.T)
         return self.ptr_func(1.0 - self.phi, self.T) - self.dc
 
+
 def render():
     samplerate = 44100
     frequency = 1000
@@ -231,5 +233,6 @@ def render():
             samplerate,
             subtype="FLOAT",
         )
+
 
 render()

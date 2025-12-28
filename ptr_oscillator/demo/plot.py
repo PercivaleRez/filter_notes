@@ -6,15 +6,18 @@ import numpy.fft as fft
 from scipy import signal
 from pathlib import Path
 
+
 def normalize(sig):
     max_value = numpy.max(numpy.abs(sig))
     if max_value == 0:
         return sig
     return sig / max_value
 
+
 def to_decibel(data):
-    data_abs = numpy.abs(data)
+    data_abs = numpy.abs(data) + numpy.finfo(numpy.float64).eps
     return 20 * numpy.log10(data_abs / numpy.max(data_abs))
+
 
 def plotSpectrum(waveform):
     nrow = 4
@@ -25,6 +28,8 @@ def plotSpectrum(waveform):
     fig.tight_layout(pad=2, rect=[0, 0, 1, 0.95])
 
     ptr_wav = sorted(Path("snd").glob(f"PTR{waveform}[0-9]*.wav"))
+    if len(ptr_wav) <= 0:
+        return
     for index, wav in enumerate(ptr_wav):
         data, samplerate = soundfile.read(wav, always_2d=True)
         spec = to_decibel(numpy.abs(fft.rfft(data.T[0])))
@@ -39,11 +44,14 @@ def plotSpectrum(waveform):
     pyplot.savefig(f"img/{waveform.lower()}_spectrum.png", dpi=100)
     pyplot.clf()
 
+
 def plotWave(waveform):
     cmap = pyplot.get_cmap("plasma")
     pyplot.figure(figsize=(9.6, 4.8))
 
     ptr_wav = sorted(Path("snd").glob(f"PTR{waveform}[0-9]*.wav"))
+    if len(ptr_wav) <= 0:
+        return
     for index, wav in enumerate(ptr_wav):
         if index < -1:
             continue
@@ -66,7 +74,17 @@ def plotWave(waveform):
     pyplot.savefig(f"img/{waveform.lower()}_waveform.png", dpi=100)
     pyplot.clf()
 
-waveform = ["Saw", "Tri", "Ramp", "Step"]
+
+waveform = [
+    "Saw",
+    "Tri",
+    "Ramp",
+    "Step",
+]
+
+imgDir = Path("img")
+if not imgDir.exists():
+    imgDir.mkdir(parents=True, exist_ok=True)
 
 for wf in waveform:
     plotSpectrum(wf)

@@ -1,19 +1,21 @@
 import re
 from pathlib import Path
 
+
 def to_python_code(order, equations):
     indent = " " * 4
     code = f"def PTR{waveform}{order}(phi, T, h):\n"
     code += indent + "n = phi / T\n"
     for idx, eqn in enumerate(equations):
         if idx == 0:
-            code += indent + f"if n >= {order - 1:.1f}:\n"
+            code += indent + f"if n >= {order:.1f}:\n"
         else:
             code += indent + f"if {idx - 1:.1f} <= n and n < {idx:.1f}:\n"
         eqn = eqn.replace("^", "**")
         code += indent * 2 + f"return {eqn}\n"
     code += indent + "return 0  # Just in case.\n"
     return code
+
 
 def to_cpp_code(order, equations):
     indent = " " * 2
@@ -22,7 +24,7 @@ def to_cpp_code(order, equations):
     code += indent + f"{typename} n = phi / T;\n"
     for idx, eqn in enumerate(equations):
         if idx == 0:
-            code += indent + f"if (n >= {typename}({order - 1})) "
+            code += indent + f"if (n >= {typename}({order})) "
         else:
             code += indent + f"if (n < {typename}({idx})) "
 
@@ -41,7 +43,8 @@ def to_cpp_code(order, equations):
     code += indent + "return 0.0; // Just in case.\n}\n"
     return code
 
-filename = Path("maxima_equations/saw")
+
+filename = Path("../maxima_equations/saw")
 
 with open(filename) as eq_file:
     raw = eq_file.read()

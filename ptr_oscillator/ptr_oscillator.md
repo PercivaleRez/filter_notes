@@ -848,7 +848,7 @@ PTR 論文では次数の区別に、 $\nabla$ による差分の回数 $W = N -
 <img src="img/step_patch.svg" alt="Image of concatnation of step function PTR." style="width: 260px;padding-bottom: 12px;"/>
 </figure>
 
-波形の比較です。
+波形の比較です。 PTRStep02 はエッジの部分がおかしくなっています。
 
 <figure>
 <img src="img/step_waveform.png" alt="Image of PTR step functioin waveform." style="width: 960px;padding-bottom: 12px;"/>
@@ -966,3 +966,7 @@ Maxima から得られた式と、式をフォーマットするコードへの�
 - Jari Kleimola, and Vesa Valimaki. "[Reducing aliasing from synthetic audio signals using polynomial transition regions](https://aaltodoc.aalto.fi/bitstream/handle/123456789/7747/publication6.pdf?sequence=9&isAllowed=y)." IEEE Signal Processing Letters 19.2 (2011): 67-70.
 - Vesa Valimaki, et al. "[Alias-suppressed oscillators based on differentiated polynomial waveforms.](http://mac.kaist.ac.kr/pubs/ValimakiNamSmithAbel-taslp2010.pdf)" IEEE Transactions on audio, speech, and language processing 18.4 (2009): 786-798.
 - [Polynomial Transition Regions (PTR)](http://research.spa.aalto.fi/publications/papers/spl-ptr/)
+
+## 変更点
+- 2025/12/28
+  - PTR オシレータをレンダリングするコードの修正。あわせてプロットを更新。

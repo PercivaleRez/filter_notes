@@ -2,13 +2,13 @@ import numpy
 import soundfile
 from pathlib import Path
 
-# yapf: disable
+# fmt: off
 def PTRStep0(phi, T):
     return 1
 
 def PTRStep1(phi, T):
     n = phi / T
-    if n >= 0.0:
+    if n >= 1.0:
         return 1
     if 0.0 <= n and n < 1.0:
         return n
@@ -16,7 +16,7 @@ def PTRStep1(phi, T):
 
 def PTRStep2(phi, T):
     n = phi / T
-    if n >= 1.0:
+    if n >= 2.0:
         return 1
     if 0.0 <= n and n < 1.0:
         return n**2+2
@@ -26,7 +26,7 @@ def PTRStep2(phi, T):
 
 def PTRStep3(phi, T):
     n = phi / T
-    if n >= 2.0:
+    if n >= 3.0:
         return 1
     if 0.0 <= n and n < 1.0:
         return n**3/6
@@ -38,7 +38,7 @@ def PTRStep3(phi, T):
 
 def PTRStep4(phi, T):
     n = phi / T
-    if n >= 3.0:
+    if n >= 4.0:
         return 1
     if 0.0 <= n and n < 1.0:
         return n**4/24
@@ -52,7 +52,7 @@ def PTRStep4(phi, T):
 
 def PTRStep5(phi, T):
     n = phi / T
-    if n >= 4.0:
+    if n >= 5.0:
         return 1
     if 0.0 <= n and n < 1.0:
         return n**5/120
@@ -68,7 +68,7 @@ def PTRStep5(phi, T):
 
 def PTRStep6(phi, T):
     n = phi / T
-    if n >= 5.0:
+    if n >= 6.0:
         return 1
     if 0.0 <= n and n < 1.0:
         return n**6/720
@@ -86,7 +86,7 @@ def PTRStep6(phi, T):
 
 def PTRStep7(phi, T):
     n = phi / T
-    if n >= 6.0:
+    if n >= 7.0:
         return 1
     if 0.0 <= n and n < 1.0:
         return n**7/5040
@@ -106,7 +106,7 @@ def PTRStep7(phi, T):
 
 def PTRStep8(phi, T):
     n = phi / T
-    if n >= 7.0:
+    if n >= 8.0:
         return 1
     if 0.0 <= n and n < 1.0:
         return n**8/40320
@@ -128,7 +128,7 @@ def PTRStep8(phi, T):
 
 def PTRStep9(phi, T):
     n = phi / T
-    if n >= 8.0:
+    if n >= 9.0:
         return 1
     if 0.0 <= n and n < 1.0:
         return n**9/362880
@@ -152,7 +152,7 @@ def PTRStep9(phi, T):
 
 def PTRStep10(phi, T):
     n = phi / T
-    if n >= 9.0:
+    if n >= 10.0:
         return 1
     if 0.0 <= n and n < 1.0:
         return n**10/3628800
@@ -175,7 +175,8 @@ def PTRStep10(phi, T):
     if 9.0 <= n and n < 10.0:
         return -n**10/3628800+n**9/36288-(5*n**8)/4032+(25*n**7)/756-(125*n**6)/216+(125*n**5)/18-(3125*n**4)/54+(62500*n**3)/189-(78125*n**2)/63+(1562500*n)/567-1561933/567
     return 0  # Just in case.
-# yapf: enable
+# fmt: on
+
 
 class PTROscillator:
     def __init__(self, ptr_func, samplerate, frequency):
@@ -200,6 +201,7 @@ class PTROscillator:
             return 2.0 * self.ptr_func(self.phi, self.T) - 1.0
         return 2.0 * (1.0 - self.ptr_func(self.phi - 0.5, self.T)) - 1.0
 
+
 class Pulsar:
     def __init__(self, samplerate, frequency):
         self.samplerate = samplerate
@@ -215,6 +217,7 @@ class Pulsar:
             self.phi -= 1.0
             return 1.0
         return 0.0
+
 
 def render():
     samplerate = 44100
@@ -244,5 +247,6 @@ def render():
             samplerate,
             subtype="FLOAT",
         )
+
 
 render()

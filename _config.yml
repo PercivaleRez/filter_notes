@@ -2,6 +2,8 @@ exclude:
 - 3pole_lowpass/3pole_lowpass.md
 - README.md
 - TODO.md
+- _dump/doubleaveragefilter.md
+- _dump/pitchshifter.md
 - adaptive_notch/adaptive_notch.md
 - am_pitchshift/am_pitchshift.md
 - amplitude_modulation/amplitude_modulation.md
@@ -58,6 +60,7 @@ exclude:
 - grunwald_letnikov/grunwald_letnikov.md
 - heat_wave_equation/demo/README.md
 - heat_wave_equation/heat_wave_equation.md
+- iir_halfband_decimator/_dump/gemini.md
 - iir_halfband_decimator/_dump/hiir-designer/README.md
 - iir_halfband_decimator/_dump/hiir.md
 - iir_halfband_decimator/cpp/build_instruction.md
@@ -79,6 +82,7 @@ exclude:
 - limiter/musicdsp_lookahead_limiter.md
 - linear_and_cubic_interpolation/linear_and_cubic_interpolation.md
 - linear_envelope/linear_envelope.md
+- matched_iir_filter/_dump/bandpass.md
 - matched_iir_filter/demo/README.md
 - matched_iir_filter/matched_iir_filter.md
 - ndboct/_dump/spectral_tilt_filter/note.md
@@ -94,6 +98,7 @@ exclude:
 - pitch_estimation/plot_gallery_pitch_estimation.md
 - polyblamp_residual/polyblamp_residual.md
 - polyblep_residual/polyblep_residual.md
+- polynomial_oscillator/_dump/gemini.md
 - polynomial_oscillator/polynomial_oscillator.md
 - ptr_oscillator/ptr_maxima.md
 - ptr_oscillator/ptr_oscillator.md

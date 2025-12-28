@@ -2,16 +2,16 @@ import numpy
 import soundfile
 from pathlib import Path
 
-# yapf: disable
+# fmt: off
 def PTRSaw0(phi, T, h):
     n = phi / T
-    if n >= -1.0:
+    if n >= 0.0:
         return 2*T*n-1
     return 0  # Just in case.
 
 def PTRSaw1(phi, T, h):
     n = phi / T
-    if n >= 0.0:
+    if n >= 1.0:
         return 2*T*n-T-1
     if 0.0 <= n and n < 1.0:
         return -2*h*n+2*T*n+2*h-T-1
@@ -19,7 +19,7 @@ def PTRSaw1(phi, T, h):
 
 def PTRSaw2(phi, T, h):
     n = phi / T
-    if n >= 1.0:
+    if n >= 2.0:
         return 2*T*n-2*T-1
     if 0.0 <= n and n < 1.0:
         return -h*n**2+2*T*n+2*h-2*T-1
@@ -29,7 +29,7 @@ def PTRSaw2(phi, T, h):
 
 def PTRSaw3(phi, T, h):
     n = phi / T
-    if n >= 2.0:
+    if n >= 3.0:
         return 2*T*n-3*T-1
     if 0.0 <= n and n < 1.0:
         return -(h*n**3)/3+2*T*n+2*h-3*T-1
@@ -41,7 +41,7 @@ def PTRSaw3(phi, T, h):
 
 def PTRSaw4(phi, T, h):
     n = phi / T
-    if n >= 3.0:
+    if n >= 4.0:
         return 2*T*n-4*T-1
     if 0.0 <= n and n < 1.0:
         return -(h*n**4)/12+2*T*n+2*h-4*T-1
@@ -55,7 +55,7 @@ def PTRSaw4(phi, T, h):
 
 def PTRSaw5(phi, T, h):
     n = phi / T
-    if n >= 4.0:
+    if n >= 5.0:
         return 2*T*n-5*T-1
     if 0.0 <= n and n < 1.0:
         return -(h*n**5)/60+2*T*n+2*h-5*T-1
@@ -71,7 +71,7 @@ def PTRSaw5(phi, T, h):
 
 def PTRSaw6(phi, T, h):
     n = phi / T
-    if n >= 5.0:
+    if n >= 6.0:
         return 2*T*n-6*T-1
     if 0.0 <= n and n < 1.0:
         return -(h*n**6)/360+2*T*n+2*h-6*T-1
@@ -89,7 +89,7 @@ def PTRSaw6(phi, T, h):
 
 def PTRSaw7(phi, T, h):
     n = phi / T
-    if n >= 6.0:
+    if n >= 7.0:
         return 2*T*n-7*T-1
     if 0.0 <= n and n < 1.0:
         return -(h*n**7)/2520+2*T*n+2*h-7*T-1
@@ -109,7 +109,7 @@ def PTRSaw7(phi, T, h):
 
 def PTRSaw8(phi, T, h):
     n = phi / T
-    if n >= 7.0:
+    if n >= 8.0:
         return 2*T*n-8*T-1
     if 0.0 <= n and n < 1.0:
         return -(h*n**8)/20160+2*T*n+2*h-8*T-1
@@ -131,7 +131,7 @@ def PTRSaw8(phi, T, h):
 
 def PTRSaw9(phi, T, h):
     n = phi / T
-    if n >= 8.0:
+    if n >= 9.0:
         return 2*T*n-9*T-1
     if 0.0 <= n and n < 1.0:
         return -(h*n**9)/181440+2*T*n+2*h-9*T-1
@@ -155,7 +155,7 @@ def PTRSaw9(phi, T, h):
 
 def PTRSaw10(phi, T, h):
     n = phi / T
-    if n >= 9.0:
+    if n >= 10.0:
         return 2*T*n-10*T-1
     if 0.0 <= n and n < 1.0:
         return -(h*n**10)/1814400+2*T*n+2*h-10*T-1
@@ -178,7 +178,8 @@ def PTRSaw10(phi, T, h):
     if 9.0 <= n and n < 10.0:
         return (h*n**10)/1814400-(h*n**9)/18144+(5*h*n**8)/2016-(25*h*n**7)/378+(125*h*n**6)/108-(125*h*n**5)/9+(3125*h*n**4)/27-(125000*h*n**3)/189+(156250*h*n**2)/63-(3125000*h*n)/567+2*T*n+(3125000*h)/567-10*T-1
     return 0  # Just in case.
-# yapf: enable
+# fmt: on
+
 
 class PTROscillator:
     def __init__(self, ptr_func, samplerate, frequency):
@@ -203,6 +204,7 @@ class PTROscillator:
             self.phi -= 1.0
         return self.ptr_func(self.phi, self.T, self.h)
 
+
 class Pulsar:
     def __init__(self, samplerate, frequency):
         self.samplerate = samplerate
@@ -219,12 +221,15 @@ class Pulsar:
             return 1.0
         return 0.0
 
+
 def renderPureSaw():
     def render(directory, prefix, phase, T):
         for order in range(11):
             func = globals()[f"PTRSaw{order}"]
             ptr = [func(phi, T, 1) for phi in phase]
-            soundfile.write(str(directory / f"{prefix}{order:02d}.wav"), ptr, samplerate)
+            soundfile.write(
+                str(directory / f"{prefix}{order:02d}.wav"), ptr, samplerate
+            )
 
     samplerate = 44100
     frequency = 1000
@@ -238,6 +243,7 @@ def renderPureSaw():
         snd_dir.mkdir(parents=True)
 
     render(snd_dir, "PTRSaw", phase, T)
+
 
 def renderSyncSaw():
     samplerate = 44100
@@ -269,6 +275,7 @@ def renderSyncSaw():
             samplerate,
             subtype="FLOAT",
         )
+
 
 renderPureSaw()
 renderSyncSaw()
