@@ -665,5 +665,10 @@ Real o2_u2 = std::cos(o2_phi + o2_omega * (Real(-2) + fraction));
 - [fft - When to use symmetric vs asymmetric (periodic) window functions? - Signal Processing Stack Exchange](https://dsp.stackexchange.com/questions/95448/when-to-use-symmetric-vs-asymmetric-periodic-window-functions)
 
 ## 変更点
+- 2026/01/01
+  - Sinc 関数の 0 周りの近似を Padé approximant からテイラー展開へ変更。
+  - 誤差について大幅に変更。
+  - 「ディレイのアンチエイリアシング -> 実装」のコードをポップノイズを抑えたものに変更。
+  - 「フィルタの長さが変わるときのノイズの低減」に窓関数のピークを sinc 関数のピークに追従させる方法を追加。
 - 2025/11/22
   - 「フィルタの長さが変わるときのノイズの低減」の節を追加。
