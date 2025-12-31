@@ -800,10 +800,38 @@ def plotResponse(firList, cutoffList, nameList, worN=8192, fs=48000, title=""):
     plt.show()
 
 
-def modifiedSinc(x, cutoff):
+def modifiedSincSimple(x, cutoff):
     if x == 0:
         return 2 * cutoff
     return np.sin(np.pi * 2 * cutoff * x) / (np.pi * x)
+
+
+def modifiedSinc(x, fc):
+    x = np.asarray(x, dtype=np.float64)
+    u = 2 * fc * x
+    theta = np.pi * u
+    out = np.zeros_like(x)
+    mask = np.abs(theta) < 5e-5 * np.pi
+
+    if np.any(mask):
+        theta_small = theta[mask]
+        t2 = theta_small * theta_small
+
+        y = 1.0 / 120.0
+        y = y * t2 - (1.0 / 6.0)
+        y = y * t2 + 1.0
+
+        out[mask] = 2 * fc * y
+
+    if np.any(~mask):
+        u_large = u[~mask]
+        x_large = x[~mask]
+        k = np.rint(u_large)
+        out[~mask] = (
+            (1 - 2 * (k % 2)) * np.sin(np.pi * (u_large - k)) / (np.pi * x_large)
+        )
+
+    return out
 
 
 def lowpassFir(length: int, cutoff: float, fractionSample: float):
@@ -1013,7 +1041,7 @@ def lowpassLanczosBiquad(
 def testFir():
     sampleRate = 48000
     tap = 256
-    fraction = 0.0
+    fraction = 0.1
 
     nOctave = int(np.round(np.log2(tap)))
 

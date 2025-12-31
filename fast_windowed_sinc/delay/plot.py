@@ -63,13 +63,15 @@ def collageSpectrogram(fullData):
     - [python - Matplotlib - Tight layout of multiple subplots with colorbar - Stack Overflow](https://stackoverflow.com/questions/74267861/matplotlib-tight-layout-of-multiple-subplots-with-colorbar)
     """
     sources = [
-        "DelayInt",
-        "DelayLinear",
-        "DelayLagrange3",
-        "DelayAntialiasedBiquad2",
-        "DelayTriangleBiquadSine",
+        # "DelayInt",
+        # "DelayLinear",
+        # "DelayLagrange3",
+        # "DelayAntialiasedBiquad2",
+        # "DelayTriangleBiquadSine",
         "DelayBlackmanHarrisBiquadSine",
-        # "DelayBlackmanHarrisSmoothBiquadSine",
+        "DelayBlackmanHarrisSmoothBiquadSine",
+        "DelayCenteredWindow",
+        "DelayCenteredWindowReference",
     ]
     logMagOffset = 1e-5
 
@@ -123,7 +125,7 @@ if __name__ == "__main__":
     with open("cpp_test_output.json", "r", encoding="utf-8") as fp:
         fullData = json.load(fp)
 
-    for name, data in fullData.items():
-        plotDelayTime(name, data["testDelayTime"])
-        plotSpectrogram(name, data["testAntialiasing"])
+    # for name, data in fullData.items():
+    #     plotDelayTime(name, data["testDelayTime"])
+    #     plotSpectrogram(name, data["testAntialiasing"])
     collageSpectrogram(fullData)

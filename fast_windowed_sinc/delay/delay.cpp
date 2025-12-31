@@ -7,6 +7,7 @@
 #include <fstream>
 #include <iostream>
 #include <limits>
+#include <memory>
 #include <numbers>
 #include <numeric>
 #include <random>
@@ -818,7 +819,7 @@ public:
 };
 
 // Fast implementation with Lanczos window that adapts to cutoff frequency.
-// Low quality, too much noise is added.
+// Low quality, too much noise is added. Output may have NaN.
 template<typename Sample, int maxTap = 256> class DelayLanczosABiquadSine {
 private:
   static_assert(maxTap > 0 && maxTap % 2 == 0);
@@ -1178,16 +1179,15 @@ public:
                                                                                          \
       constexpr Sample pi = std::numbers::pi_v<Sample>;                                  \
       const Sample o1_omega = Sample(2) * pi * cutoff;                                   \
-      const Sample o1_phi = mid * o1_omega;                                              \
       const Sample o1_k = Sample(2) * std::cos(o1_omega);                                \
-      Sample o1_u1 = std::sin(o1_phi - o1_omega);                                        \
-      Sample o1_u2 = std::sin(o1_phi - Sample(2) * o1_omega);                            \
+      Sample o1_u1 = std::sin((mid - Sample(1)) * o1_omega);                             \
+      Sample o1_u2 = std::sin((mid - Sample(2)) * o1_omega);                             \
                                                                                          \
       const Sample o2_omega = Sample(2) * pi / Sample(maxTap + 1);                       \
-      const Sample o2_phi = pi / Sample(2) + o2_omega * Sample(maxTap / 2 - halfTap);    \
+      const Sample o2_phi = o2_omega * Sample(maxTap / 2 - halfTap);                     \
       const Sample o2_k = Sample(2) * std::cos(o2_omega);                                \
-      Sample o2_u1 = std::sin(o2_phi);                                                   \
-      Sample o2_u2 = std::sin(o2_phi - o2_omega);                                        \
+      Sample o2_u1 = std::cos(o2_phi);                                                   \
+      Sample o2_u2 = std::cos(o2_phi - o2_omega);                                        \
                                                                                          \
       int rptr = wptr - timeInt - halfTap;                                               \
       if (rptr < 0) rptr += size;                                                        \
@@ -1358,6 +1358,197 @@ public:
   }
 };
 
+// This version matches the peak of sinc and Blackman-Harris window.
+template<typename Real, int maxTap = 256> class DelayCenteredWindow {
+private:
+  static_assert(maxTap > 0 && maxTap % 2 == 0);
+
+  static constexpr int minTimeSample = maxTap / 2 - 1;
+
+  Real maxTime = 0;
+  Real prevTime = 0;
+  int wptr = 0;
+  std::vector<Real> buf{maxTap, Real(0)};
+
+public:
+  std::string name() { return "centered_window"; }
+
+  void setup(Real maxTimeSample)
+  {
+    maxTime = maxTimeSample;
+    buf.resize(std::max(size_t(maxTap), size_t(maxTime) + maxTap / 2 + 1));
+  }
+
+  void reset()
+  {
+    prevTime = 0;
+    wptr = 0;
+    std::fill(buf.begin(), buf.end(), Real(0));
+  }
+
+  Real process(Real input, Real timeInSample)
+  {
+    const int size = int(buf.size());
+
+    // Write to buffer.
+    if (++wptr >= size) wptr = 0;
+    buf[wptr] = input;
+
+    // Start reading from buffer. Setup convolution filter parameters.
+    const int localTap = std::clamp(2 * int(timeInSample), int(2), maxTap);
+    const int halfTap = localTap / 2;
+    const Real clamped = std::clamp(timeInSample, Real(halfTap - 1), maxTime);
+
+    const Real timeDiff = std::abs(prevTime - clamped + Real(1));
+    prevTime = clamped;
+    const Real cutoff = timeDiff <= Real(1) ? Real(0.5) : std::exp2(-timeDiff);
+
+    if (timeInSample <= 0) return input * Real(2) * cutoff;
+
+    const int timeInt = int(clamped);
+    const Real fraction = clamped - Real(timeInt);
+    const Real mid = fraction - halfTap;
+
+    // Setup oscillator 1 (o1). Windowed sinc lowpass.
+    constexpr Real pi = std::numbers::pi_v<Real>;
+    const Real o1_omega = Real(2) * pi * cutoff;
+    const Real o1_k = Real(2) * std::cos(o1_omega);
+    Real o1_u1 = std::sin((mid - Real(1)) * o1_omega);
+    Real o1_u2 = std::sin((mid - Real(2)) * o1_omega);
+
+    // Setup oscillator 2 (o2). Blackman-Harris window.
+    const Real o2_omega = Real(2) * pi / Real(maxTap + 1);
+    const Real o2_phi = o2_omega * Real(maxTap / 2 - halfTap);
+    const Real o2_k = Real(2) * std::cos(o2_omega);
+    Real o2_u1 = std::cos(o2_phi + o2_omega * (Real(-1) + fraction));
+    Real o2_u2 = std::cos(o2_phi + o2_omega * (Real(-2) + fraction));
+
+    // Convolution.
+    int rptr = wptr - timeInt - halfTap;
+    if (rptr < 0) rptr += size;
+
+    Real sum = 0;
+    for (int i = 0; i < localTap; ++i) {
+      const Real o1_u0 = o1_k * o1_u1 - o1_u2;
+      o1_u2 = o1_u1;
+      o1_u1 = o1_u0;
+
+      const Real o2_u0 = o2_k * o2_u1 - o2_u2;
+      o2_u2 = o2_u1;
+      o2_u1 = o2_u0;
+
+      const Real window = Real(0.21747)
+        + o2_u0 * (Real(-0.45325) + o2_u0 * (Real(0.28256) + o2_u0 * Real(-0.04672)));
+
+      const Real x = Real(i) + mid;
+      Real sinc;
+      if (std::abs(x) <= Real(0.1)) {
+        Real q = pi * cutoff * x;
+        q *= q;
+        sinc = Real(2) / Real(3) * cutoff * (Real(15) - Real(7) * q) / (Real(5) + q);
+      } else {
+        sinc = o1_u0 / (pi * x);
+      }
+      sum += sinc * window * buf[rptr];
+      if (++rptr >= size) rptr = 0;
+    }
+    return sum;
+  }
+};
+
+// Using sin/cos from standard library.
+template<typename Real, int maxTap = 256> class DelayCenteredWindowReference {
+private:
+  static_assert(maxTap > 0 && maxTap % 2 == 0);
+
+  static constexpr int minTimeSample = maxTap / 2 - 1;
+
+  Real maxTime = 0;
+  Real prevTime = 0;
+  int wptr = 0;
+  std::vector<Real> buf{maxTap, Real(0)};
+
+public:
+  std::string name() { return "centered_window_ref"; }
+
+  void setup(Real maxTimeSample)
+  {
+    maxTime = maxTimeSample;
+    buf.resize(std::max(size_t(maxTap), size_t(maxTime) + maxTap / 2 + 1));
+  }
+
+  void reset()
+  {
+    prevTime = 0;
+    wptr = 0;
+    std::fill(buf.begin(), buf.end(), Real(0));
+  }
+
+  Real process(Real input, Real timeInSample)
+  {
+    constexpr Real pi = std::numbers::pi_v<Real>;
+
+    const auto modifiedSinc = [&](Real x, Real cutoff)
+    {
+      const Real u = Real(2) * cutoff * x;
+      const Real theta = pi * u;
+      if (std::abs(theta) < Real(0.32)) {
+        const Real t2 = theta * theta;
+
+        Real y = Real(-1) / Real(39916800);
+        y = y * t2 + Real(+1) / Real(362880);
+        y = y * t2 + Real(-1) / Real(5040);
+        y = y * t2 + Real(+1) / Real(120);
+        y = y * t2 + Real(-1) / Real(6);
+        y = y * t2 + Real(+1);
+
+        return Real(2) * cutoff * y;
+      }
+
+      const auto k = std::llrint(u);
+      return Real(1 - 2 * (k & 1)) * std::sin(pi * (u - Real(k))) / (pi * x);
+    };
+
+    const int size = int(buf.size());
+
+    // Write to buffer.
+    if (++wptr >= size) wptr = 0;
+    buf[wptr] = input;
+
+    // Read from buffer.
+    const int localTap = std::clamp(2 * int(timeInSample), int(2), maxTap);
+    const int halfTap = localTap / 2;
+    const Real clamped = std::clamp(timeInSample, Real(halfTap - 1), maxTime);
+
+    const Real timeDiff = std::abs(prevTime - clamped + Real(1));
+    prevTime = clamped;
+    Real cutoff = timeDiff <= Real(1) ? Real(0.5) : std::exp2(-timeDiff);
+    if (timeInSample <= 0) return input * Real(2) * cutoff;
+
+    const int timeInt = int(clamped);
+    const Real fraction = clamped - Real(timeInt);
+    const Real mid = fraction - halfTap;
+
+    // Convolution.
+    int rptr = wptr - timeInt - halfTap;
+    if (rptr < 0) rptr += size;
+
+    Real sum = 0;
+    const Real window_omega = Real(2) * pi / Real(maxTap + 1);
+    const Real window_phase = window_omega * Real(maxTap / 2 - halfTap);
+    for (int i = 0; i < localTap; ++i) {
+      const Real cn = std::cos((Real(i) + fraction) * window_omega + window_phase);
+      const Real window = Real(0.21747)
+        + cn * (Real(-0.45325) + cn * (Real(0.28256) + cn * Real(-0.04672)));
+
+      const Real sinc = modifiedSinc(Real(i) + mid, cutoff);
+      sum += sinc * window * buf[rptr];
+      if (++rptr >= size) rptr = 0;
+    }
+    return sum;
+  }
+};
+
 template<typename Float>
 std::string vectorToJsonList(const std::string &name, const std::vector<Float> &data)
 {
@@ -1472,7 +1663,7 @@ template<typename Delay, typename Sample> void benchmark()
   }
 
   std::cout << std::format(
-    ROW_FORMAT_STR, delay.name(), sumElapsed, nSample, delay.process(0, 0));
+    ROW_FORMAT_STR, delay.name(), sumElapsed, nSample, delay.process(0, Sample(1)));
 }
 
 void testAll()
@@ -1486,30 +1677,32 @@ void testAll()
   text.pop_back();                                                                       \
   text += "},";
 
-  ADD_DATA(DelayInt);
-  ADD_DATA(DelayLinear);
-  ADD_DATA(DelayLagrange3);
-  ADD_DATA(DelayAntialiasedReference);
-  ADD_DATA(DelayAntialiasedInnerProduct);
-  ADD_DATA(DelayAntialiasedInlined);
-  ADD_DATA(DelayAntialiasedBiquadNaive);
-  ADD_DATA(DelayAntialiasedBiquad2);
-  ADD_DATA(DelayAntialiasedReinsch);
-  ADD_DATA(DelayAntialiasedMagic);
-  ADD_DATA(DelayAntialiasedStableQuad);
-  ADD_DATA(DelayLanczosABiquadSine);
-  ADD_DATA(DelayLanczos1BiquadSine);
-  ADD_DATA(DelayBlackmanBiquadSine);
-  ADD_DATA(DelayNuttallBiquadSine);
+  // ADD_DATA(DelayInt);
+  // ADD_DATA(DelayLinear);
+  // ADD_DATA(DelayLagrange3);
+  // ADD_DATA(DelayAntialiasedReference);
+  // ADD_DATA(DelayAntialiasedInnerProduct);
+  // ADD_DATA(DelayAntialiasedInlined);
+  // ADD_DATA(DelayAntialiasedBiquadNaive);
+  // ADD_DATA(DelayAntialiasedBiquad2);
+  // ADD_DATA(DelayAntialiasedReinsch);
+  // ADD_DATA(DelayAntialiasedMagic);
+  // ADD_DATA(DelayAntialiasedStableQuad);
+  // ADD_DATA(DelayLanczosABiquadSine);
+  // ADD_DATA(DelayLanczos1BiquadSine);
+  // ADD_DATA(DelayBlackmanBiquadSine);
+  // ADD_DATA(DelayNuttallBiquadSine);
   ADD_DATA(DelayBlackmanHarrisBiquadSine);
-  ADD_DATA(DelayBlackmanNuttallBiquadSine);
-  ADD_DATA(DelayFlattopBiquadSine);
-  ADD_DATA(DelayBlackmanSmoothBiquadSine);
-  ADD_DATA(DelayNuttallSmoothBiquadSine);
+  // ADD_DATA(DelayBlackmanNuttallBiquadSine);
+  // ADD_DATA(DelayFlattopBiquadSine);
+  // ADD_DATA(DelayBlackmanSmoothBiquadSine);
+  // ADD_DATA(DelayNuttallSmoothBiquadSine);
   ADD_DATA(DelayBlackmanHarrisSmoothBiquadSine);
-  ADD_DATA(DelayBlackmanNuttallSmoothBiquadSine);
-  ADD_DATA(DelayFlattopSmoothBiquadSine);
-  ADD_DATA(DelayTriangleBiquadSine);
+  // ADD_DATA(DelayBlackmanNuttallSmoothBiquadSine);
+  // ADD_DATA(DelayFlattopSmoothBiquadSine);
+  // ADD_DATA(DelayTriangleBiquadSine);
+  ADD_DATA(DelayCenteredWindow);
+  ADD_DATA(DelayCenteredWindowReference);
 #undef ADD_DATA
 
   text.pop_back();
@@ -1529,30 +1722,32 @@ void benchmarkAll()
     ROW_FORMAT_STR, "Name", "Time [ms]", "Sample Count", "Last Output")
             << std::format(ROW_FORMAT_STR, "--", "--", "--", "--");
 
-  benchmark<DelayInt<double>, double>();
-  benchmark<DelayLinear<double>, double>();
-  benchmark<DelayLagrange3<double>, double>();
-  benchmark<DelayAntialiasedReference<double>, double>();
-  benchmark<DelayAntialiasedInnerProduct<double>, double>();
-  benchmark<DelayAntialiasedInlined<double>, double>();
-  benchmark<DelayAntialiasedBiquadNaive<double>, double>();
-  benchmark<DelayAntialiasedBiquad2<double>, double>();
-  benchmark<DelayAntialiasedReinsch<double>, double>();
-  benchmark<DelayAntialiasedMagic<double>, double>();
-  benchmark<DelayAntialiasedStableQuad<double>, double>();
-  benchmark<DelayLanczosABiquadSine<double>, double>();
-  benchmark<DelayLanczos1BiquadSine<double>, double>();
-  benchmark<DelayBlackmanBiquadSine<double>, double>();
-  benchmark<DelayNuttallBiquadSine<double>, double>();
+  // benchmark<DelayInt<double>, double>();
+  // benchmark<DelayLinear<double>, double>();
+  // benchmark<DelayLagrange3<double>, double>();
+  // benchmark<DelayAntialiasedReference<double>, double>();
+  // benchmark<DelayAntialiasedInnerProduct<double>, double>();
+  // benchmark<DelayAntialiasedInlined<double>, double>();
+  // benchmark<DelayAntialiasedBiquadNaive<double>, double>();
+  // benchmark<DelayAntialiasedBiquad2<double>, double>();
+  // benchmark<DelayAntialiasedReinsch<double>, double>();
+  // benchmark<DelayAntialiasedMagic<double>, double>();
+  // benchmark<DelayAntialiasedStableQuad<double>, double>();
+  // benchmark<DelayLanczosABiquadSine<double>, double>();
+  // benchmark<DelayLanczos1BiquadSine<double>, double>();
+  // benchmark<DelayBlackmanBiquadSine<double>, double>();
+  // benchmark<DelayNuttallBiquadSine<double>, double>();
   benchmark<DelayBlackmanHarrisBiquadSine<double>, double>();
-  benchmark<DelayBlackmanNuttallBiquadSine<double>, double>();
-  benchmark<DelayFlattopBiquadSine<double>, double>();
-  benchmark<DelayBlackmanSmoothBiquadSine<double>, double>();
-  benchmark<DelayNuttallSmoothBiquadSine<double>, double>();
+  // benchmark<DelayBlackmanNuttallBiquadSine<double>, double>();
+  // benchmark<DelayFlattopBiquadSine<double>, double>();
+  // benchmark<DelayBlackmanSmoothBiquadSine<double>, double>();
+  // benchmark<DelayNuttallSmoothBiquadSine<double>, double>();
   benchmark<DelayBlackmanHarrisSmoothBiquadSine<double>, double>();
-  benchmark<DelayBlackmanNuttallSmoothBiquadSine<double>, double>();
-  benchmark<DelayFlattopSmoothBiquadSine<double>, double>();
-  benchmark<DelayTriangleBiquadSine<double>, double>();
+  // benchmark<DelayBlackmanNuttallSmoothBiquadSine<double>, double>();
+  // benchmark<DelayFlattopSmoothBiquadSine<double>, double>();
+  // benchmark<DelayTriangleBiquadSine<double>, double>();
+  benchmark<DelayCenteredWindow<double>, double>();
+  benchmark<DelayCenteredWindowReference<double>, double>();
 }
 
 int main()

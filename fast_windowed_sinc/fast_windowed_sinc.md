@@ -28,6 +28,15 @@ $$
 
 $f_c$ の単位は rad / 2π で、値の範囲が [0.0, 0.5] となるように正規化されてます。
 
+以下は Python で素朴に実装した sinc 関数です。音のフィルタ設計ならこれでも十分です。
+
+```python
+def modifiedSincNaive(x, fc):
+    if x == 0:
+        return 2 * fc
+    return np.sin(np.pi * 2 * fc * x) / (np.pi * x)
+```
+
 ## 正確な実装
 以下は矩形窓を用いた windowed sinc フィルタを設計する Python 3 のコードです。
 
@@ -35,11 +44,33 @@ $f_c$ の単位は rad / 2π で、値の範囲が [0.0, 0.5] となるように
 import numpy as np
 
 def modifiedSinc(x, cutoff):
-    if x == 0:
-        return 2 * cutoff
-    return np.sin(np.pi * 2 * cutoff * x) / (np.pi * x)
+    u = 2 * fc * x
+    theta = np.pi * u
+
+    if abs(theta) < 0.32: # x = 0 付近はテイラー展開で近似。
+        t2 = theta * theta
+
+        y = -1.0 / 39916800.0
+        y = y * t2 + (1.0 / 362880.0)
+        y = y * t2 - (1.0 / 5040.0)
+        y = y * t2 + (1.0 / 120.0)
+        y = y * t2 - (1.0 / 6.0)
+        y = y * t2 + 1.0
+
+        return 2 * fc * y
+
+    # レンジリダクション。
+    k = np.rint(u)
+    return (1 - 2 * (k % 2)) * np.sin(np.pi * (u - k)) / (np.pi * x)
 
 def lowpassFir(length, cutoff, fractionSample):
+    """
+    `length`         : FIR フィルタのタップ数。
+    `cutoff`         : 正規化されたカットオフ周波数。単位は rad / 2π 。範囲は [0, 0.5] 。
+    `fractionSample` : サンプル数であらわされた小数点以下の群遅延の量。範囲は [0, 1] 。
+
+    `fractionSample` の向きは、配列 `fir` のインデックスをさかのぼる方向に固定。
+    """
     mid = fractionSample - (length // 2 + length % 2)
     fir = np.zeros(length)
     for i in range(length):
@@ -48,26 +79,66 @@ def lowpassFir(length, cutoff, fractionSample):
     return fir
 ```
 
-以下は `lowpassFir` のパラメータの意味です。
+`modifiedSinc` のテイラー展開は以下の形をしています。
 
-- `length` : FIR フィルタのタップ数。
-- `cutoff` : 正規化されたカットオフ周波数。単位は rad / 2π 。範囲は [0, 0.5] 。
-- `fractionSample` : サンプル数であらわされた小数点以下の群遅延の量。範囲は [0, 1] 。
+$$
+\begin{aligned}
+\mathrm{sinc}(x, f_c)
+&\approx
+2 f_c \sum_i (-1)^i \frac{(2 f_c \pi x)^{2i}}{(2 i + 1)!} \\
+&=
+2 f_c \left(
+  1
+  -\frac{u^{2}}{3!}
+  +\frac{u^{4}}{5!}
+  -\frac{u^{6}}{7!}
+  +\frac{u^{8}}{9!}
+  -\frac{u^{10}}{11!}
+  \dots
+\right), \quad u = 2 f_c \pi x.
+\end{aligned}
+$$
 
-`fractionSample` は向きがあります。ここでは配列 `fir` のインデックスをさかのぼる方向に固定しています。
+`modifiedSinc` では 0 の周りを広めにカバーするために 10 次のテイラー展開を使っています。[テイラー展開の誤差は近似式に現れない、最も次数の高い項から求められます](https://mathworld.wolfram.com/TaylorSeries.html)。したがってテイラー展開への分岐点は 12 次の項と、マシンイプシロン $\epsilon$ からなる以下の不等式を $u$ について解けば得られます。
+
+$$
+\dfrac{u^{12}}{13!} < \epsilon
+$$
+
+64-bit float では $\epsilon = 2^{-52}$ となり、不等式の解である $u < (13! \; \epsilon)^{1/12}$ に代入するとおよそ `0.32` となります。この広さは以降の高速な実装で役に立ちます。
+
+レンジリダクションによって理論上は正確になります。まずは sinc 関数を再掲します。
+
+$$
+\mathrm{sinc}(x, f_c) = \frac{\sin(2 \pi f_c x)}{\pi x}.
+$$
+
+レンジリダクションが入るのは $\sin$ の引数です。まず、コードと同様にレンジリダクションする前の係数を $u = 2 f_c x$ と置きます。また、レンジリダクションされた値を $r = u - k$ と置きます。 $k$ はコード中の `k` と対応しています。そして、浮動小数点数であらわされた $\pi$ には丸め誤差 $\delta$ があるので $\pi \approx \pi + \delta$ となります。ここで $\sin$ の引数である $\pi u$ あるいは $\pi r$ に誤差を含めると以下のように書けます。
+
+$$
+\begin{aligned}
+\pi u &\approx (\pi + \delta) u && = \pi u + \delta u. \\
+\pi r &\approx (\pi + \delta) r && = \pi r + \delta r. \\
+\end{aligned}
+$$
+
+ここで $r$ の定義より $|u| \geq |r|$ なので、 $|\delta u| \geq |\delta r|$  となり、 $|u| > |r|$ なら誤差が減ると言えます。
+
+レンジリダクションを行うと `x = n / (2 * cutoff)` のときに 0 を出力するケースが増えます。厳密には浮動小数点によって丸められた `x = n / (2 * cutoff)` を `modifiedSinc` に代入しても 0 とはならないことがほとんどです。
 
 ## 高速な実装
 以下は biquad オシレータと呼ばれる再帰的に sin を計算する方法を使った高速な実装です。見やすさのために Python で書いていますが、特に CPython では `for` が遅いので高速化の恩恵は薄いです。 C++ による実装は「[ディレイのアンチエイリアシング](#ディレイのアンチエイリアシング)」を参照してください。
 
+`fractionSample` が 0 または 1 に近いときに `x == 0` の周りで値がおかしくなるので、テイラー展開への分岐は必須です。分岐の幅が `±0.32` と広いのはおかしくなる部分を完全にカバーするためです。
+
 ```python
-def lowpassFirBiquadPede(length: int, cutoff: float, fractionSample: float):
+def lowpassFirBiquad(length: int, cutoff: float, fractionSample: float):
     mid = fractionSample - length // 2 - length % 2
 
     omega = 2 * np.pi * cutoff
-    phi = mid * omega
     k = 2 * np.cos(omega)
-    u1 = np.sin(phi - omega)
-    u2 = np.sin(phi - 2 * omega)
+    u1 = np.sin((mid - 1) * omega)
+    u2 = np.sin((mid - 2) * omega)
 
     fir = np.zeros(length)
     for i in range(length):
@@ -76,60 +147,99 @@ def lowpassFirBiquadPede(length: int, cutoff: float, fractionSample: float):
         u1 = u0
 
         x = i + mid
-        if abs(x) < 0.1:
-            q = np.pi * cutoff * x
-            q *= q
-            fir[i] = (2 / 3) * cutoff * (15 - 7 * q) / (5 + q)
+        theta = np.pi * 2 * cutoff * x
+        if abs(theta) < 0.32:
+            t2 = theta * theta
+
+            y = -1.0 / 39916800.0
+            y = y * t2 + (1.0 / 362880.0)
+            y = y * t2 - (1.0 / 5040.0)
+            y = y * t2 + (1.0 / 120.0)
+            y = y * t2 - (1.0 / 6.0)
+            y = y * t2 + 1.0
+            fir[i] = 2 * cutoff * y
         else:
             fir[i] = u0 / (np.pi * x)
     return fir
 ```
 
-再帰的な sin の計算に biquad オシレータを使っています。
+### 誤差
+`/fp:fast` や `-ffast-math` のような浮動小数点数の計算順序を入れ替えるコンパイラの最適化オプションを使うと誤差が変わります。
 
-`fractionSample` が 0 または 1 に近いときに `x == 0` の周りで値がおかしくなるので、 `if abs(x) < 0.1` の分岐を設けて [Padé approximant](https://en.wikipedia.org/wiki/Pad%C3%A9_approximant) での計算に切り替えています。分岐での近似式は以下の [Maxima](https://maxima.sourceforge.io/) のコードから出力されたものです。
+再帰的な sin の計算方法はいくつか種類があり、別記事の「 [sin, cos を反復的に計算するアルゴリズムのレシピ](../recursive_sine/recursive_sine.html)」にレシピを載せています。簡単に調べたところでは coupled form と呼ばれる形を使うと biquad よりは誤差が減ります。ただし、他のアルゴリズムに替えると biquad よりは遅くなります。また、 `lowpassFirBiquad` の `u1` と `u2` は「 sin, cos を反復的に計算するアルゴリズムのレシピ」とは式の形を変えて初期位相のずれによる誤差を減らしています。
 
-```maxima
-sinc: sin(2 * %pi * f_c * x) / (%pi * x);
-pade(taylor(sinc, x, 0, 4), 2, 2);
-```
+ループ内の誤差について検討します。方針としては 1 サンプルごとの位相の進みを求めて、フィルタのタップ数 $N$ から誤差の蓄積を計算できるようにします。
 
-以下は整理した出力です。
+まず、誤差の元となるのは `k` に加えられる丸め誤差です。真値を $k$ とします。 $\omega = 2 \pi f_c$ です。
 
 $$
-\mathrm{sinc} (x, f_c) \approx \frac{2}{3} f_c \frac{15 - 7 (\pi f_c x)^2}{5 + (\pi f_c x)^2},
-\enspace \text{only when} \ x\ \text{is close to 0}.
+k = 2 \cos(\omega).
 $$
 
-Padé approximant への分岐 `if abs(x) < 0.1` のしきい値 `0.1` は適当に決めた値です。適切な分岐先は `cutoff` に応じて変わります。 `cutoff` が低くなるときはしきい値を上げて、 Padé approximant によって計算する範囲を広くしたほうが誤差が減る傾向があります。逆に `cutoff` が正規化されたナイキスト周波数 `0.5` に近いときは、しきい値を下げて `0.001` あたりに設定すると誤差が減る傾向があります。 `cutoff` に応じた適切なしきい値を調べるコードを以下のリンク先の `findBranchingThreshold` に掲載しています。
+$k$ の式より真の周波数 $\omega$ の式が得られます。
 
-- [二分探索でしきい値を調べる C++ のコード (github.com)](https://github.com/ryukau/filter_notes/blob/a08bb919d2c2c07e7e21561fd7e3ee12d4c055b2/fast_windowed_sinc/fast_sinc_error/error.cpp#L435-L523)
+$$
+\omega = \arccos\left(\frac{k}{2}\right).
+$$
 
-### 誤差と実装のバリエーション
-以下は誤差が変わる定性的な要素の一覧です。
+真の周波数 $\omega$ から誤差のある周波数を引いて、 1 サンプルあたりの位相の誤差 $\Delta \omega$ を求めます。誤差 $\epsilon$ を $k$ に加えています。
 
-- コンパイラの最適化オプション
-- 再帰的な sin の計算方法
-- 初期位相の計算方法
+$$
+\Delta \omega = \omega - \arccos\left( \frac{k + \epsilon}{2} \right).
+$$
 
-`/fp:fast` や `-ffast-math` のような浮動小数点数の計算順序を入れ替えるコンパイラの最適化オプションを使うと、以下で検討するような計算方法の変更では誤差の低減が見込みにくくなります。したがって、以下、この節では `/fp:fast` や `-ffast-math` を使わないことを前提としています。
+するとループカウンター $n$ から位相のずれを計算する式が得られます。
 
-再帰的な sin の計算方法はいくつか種類があり、別記事の「 [sin, cos を反復的に計算するアルゴリズムのレシピ](../recursive_sine/recursive_sine.html)」にレシピを載せています。簡単に調べたところでは coupled form と呼ばれる形を使うと biquad よりは誤差が減ります。
+$$
+\Delta \phi[n] = n \times \Delta \omega.
+$$
 
-再帰的な計算を行うので、初期位相の細かいずれによって誤差が変わります。例えば、上で紹介した biquad オシレータを使った高速な実装は `u1` と `u2` の計算において以下の形を使うことで、再帰的な sin の計算精度を少し良くできます。
+$N$ を FIR フィルタのタップ数とすると以下の式でざっくりとした誤差の上限を計算できます。ざっくりというのは式中でマシンイプシロン $\epsilon$ としている値は、実際には $k$ の値に応じて変わる浮動小数点数の丸め誤差であり、一定ではないからです。
+
+$$
+\Delta \phi \approx N \times \left(
+  \omega - \arccos\left( \cos(\omega) + \frac{\epsilon}{2} \right)
+\right).
+$$
+
+よりざっくりとした相対誤差の計算は以下の式で行えます。 $N$ は FIR フィルタのタップ数です。
+
+$$
+\mathrm{relative\_error} \approx N \times \frac{\epsilon}{\sin(\omega)}.
+$$
+
+$k$ を $\omega$ について微分すると $\dfrac{d k}{d \omega} = -2 \sin(\omega)$ となり、微分演算子について $dk  = \epsilon$ と代入してしまえば $d \omega \approx \Delta \omega$ と近似できるというところから出てきています。
+
+大まかな誤差を出します。 $f_c = \dfrac{ω}{2 π}$ で、コード中の `cutoff` と対応しています。 $\epsilon$ には 64-bit float のマシンイプシロンを代入しました。
+
+|           | $f_c = 0.0005$ | $f_c = 0.005$ | $f_c = 0.05$ | $f_c = 0.5$ |
+|-----------|----------------|---------------|--------------|-------------|
+| $N = 4$   | 2.01e-13       | 1.96e-14      | 8.88e-16     | 5.96e-08    |
+| $N = 8$   | 4.02e-13       | 3.92e-14      | 1.77e-15     | 1.19e-07    |
+| $N = 16$  | 8.04e-13       | 7.84e-14      | 3.55e-15     | 2.38e-07    |
+| $N = 32$  | 1.60e-12       | 1.56e-13      | 7.10e-15     | 4.76e-07    |
+| $N = 64$  | 3.21e-12       | 3.13e-13      | 1.42e-14     | 9.53e-07    |
+| $N = 128$ | 6.43e-12       | 6.27e-13      | 2.84e-14     | 1.90e-06    |
+| $N = 256$ | 1.28e-11       | 1.25e-12      | 5.68e-14     | 3.81e-06    |
+
+当然ですが $N$ が増えると誤差が増えています。 $f_c$ に対して U 字を描くような誤差となっています。ナイキスト周波数の $f_c = 0.5$ で誤差が多く、間の 0.05 ではやや誤差が下がり、 0.005 から 0.0005 に向けてまた誤差が増えています。 $f_c = 0.0005$ は可聴域の下限 20 Hz を音でよくあるサンプリング周波数の 48000 で除算した値に近いです (`20/48000 ~= 0.0004`) 。
+
+<details>
+<summary>テーブルの計算に使った Python スクリプト</summary>
 
 ```python
-# 変形した k, u1, u2 の初期値設定。
-cω = np.cos(omega)
-sω = np.sin(omega)
-cφ = np.cos(phi)
-sφ = np.sin(phi)
-k = 2 * cω
-u1 = sφ * cω - cφ * sω    # ~= sin(phi - omega), 加法定理。
-c2ω = 2 * cω * cω - 1     # ~= cos(2 * omega), 倍角公式。
-s2ω = 2 * sω * cω         # ~= sin(2 * omega), 倍角公式。
-u2 = sφ * c2ω - cφ * s2ω  # ~= sin(phi - 2 * omega), 加法定理。
+import numpy as np
+def errorFastSinc(length, cutoff, epsilon=np.finfo(np.float64).eps):
+    omega = 2 * np.pi * cutoff
+    return length * (omega - np.arccos(np.cos(omega) + epsilon / 2))
+
+length = np.array([4, 8, 16, 32, 64, 128, 256])
+cutoff = np.array([5e-4, 5e-3, 5e-2, 5e-1])
+for N in length:
+    print(errorFastSinc(N, cutoff))
 ```
+
+</details>
 
 ## Cosine-sum 窓
 再帰的な sin の計算を行うオシレータを 1 つ増やすことで、 [cosine-sum 窓](https://en.wikipedia.org/wiki/Window_function#Cosine-sum_windows)と呼ばれる種類の窓関数を高速にかけることができます。ここでは cosine-sum 窓の 1 つである Blackman-Harris 窓について具体的な実装を紹介します。
@@ -185,10 +295,9 @@ def blackmanHarris(length: int):
     isEven = 1 - length % 2
 
     ω = 2 * np.pi / float(length - isEven)
-    φ = np.pi / 2
     k = 2 * np.cos(ω)
-    u1 = np.sin(φ - ω)
-    u2 = np.sin(φ - 2 * ω)
+    u1 = np.cos(-1 * ω)  # k と cos の角度が重複しているので簡略化できる。
+    u2 = np.cos(-2 * ω)
 
     window = np.zeros(length)
     for i in range(length):
@@ -210,14 +319,13 @@ def lowpassBlackmanHarrisBiquad(length: int, cutoff: float, fractionSample: floa
     o1_omega = 2 * np.pi * cutoff
     o1_phi = mid * o1_omega
     o1_k = 2 * np.cos(o1_omega)
-    o1_u1 = np.sin(o1_phi - o1_omega)
-    o1_u2 = np.sin(o1_phi - 2 * o1_omega)
+    o1_u1 = np.sin((mid - 1) * o1_omega)
+    o1_u2 = np.sin((mid - 2) * o1_omega)
 
     o2_omega = 2 * np.pi / float(length + isEven)
-    o2_phi = np.pi / 2
     o2_k = 2 * np.cos(o2_omega)
-    o2_u1 = np.sin(o2_phi - (1 - isEven) * o2_omega)
-    o2_u2 = np.sin(o2_phi - (2 - isEven) * o2_omega)
+    o2_u1 = np.cos((isEven + fractionSample - 1) * o2_omega)
+    o2_u2 = np.cos((isEven + fractionSample - 2) * o2_omega)
 
     fir = np.zeros(length)
     for i in range(length):
@@ -230,10 +338,17 @@ def lowpassBlackmanHarrisBiquad(length: int, cutoff: float, fractionSample: floa
         o2_u1 = o2_u0
 
         x = i + mid
-        if abs(x) < 0.1:
-            q = np.pi * cutoff * x
-            q *= q
-            fir[i] = (2 / 3) * cutoff * (15 - 7 * q) / (5 + q)
+        theta = np.pi * 2 * cutoff * x
+        if abs(theta) < 0.32:
+            t2 = theta * theta
+
+            y = -1.0 / 39916800.0
+            y = y * t2 + (1.0 / 362880.0)
+            y = y * t2 - (1.0 / 5040.0)
+            y = y * t2 + (1.0 / 120.0)
+            y = y * t2 - (1.0 / 6.0)
+            y = y * t2 + 1.0
+            fir[i] = 2 * cutoff * y
         else:
             fir[i] = o1_u0 / (np.pi * x)
 
@@ -277,6 +392,8 @@ blackmanharris = u0*(u0*(0.28256 - 0.04672*u0) - 0.45325) + 0.21747
 blackmannuttall = u0*(u0*(0.273199 - 0.0425644*u0) - 0.4572542) + 0.2269824
 flattop = u0*(u0*(u0*(0.055578944*u0 - 0.334315788) + 0.498947372) - 0.165894739) - 0.05473684
 ```
+
+Chebyshev 多項式の次数が高いときは [Clenshaw アルゴリズム](https://en.wikipedia.org/wiki/Clenshaw_algorithm#Special_case_for_Chebyshev_series)を使うほうが高精度に計算できます。ただし演算数が増えるので、上記の次数の低い cosine-sum 窓であれば Horner's method で十分です。 Clenshaw アルゴリズムの実装は [chebfun の Matlab 実装](https://github.com/chebfun/chebfun/blob/master/%40chebtech/clenshaw.m)が参考になります。
 
 ## ディレイのアンチエイリアシング
 高速な windowed sinc フィルタの計算を応用して、ディレイの時間変更時に生じるエイリアシングを低減します。
@@ -360,32 +477,32 @@ Windowed sinc フィルタの長さを固定すると、安定してノイズの
 以下は高速な windowed sinc フィルタの計算を応用した、アンチエイリアシングされたディレイの実装です。 Blackman-Harris 窓を使っています。 Windowed sinc フィルタの長さは偶数に固定しています。 CPU 負荷を減らしたいときは `maxTap` を適当な偶数に減らしてください。
 
 ```c++
-template<typename Sample, int maxTap = 256> class DelayBlackmanHarrisBiquadSine {
+template<typename Real, int maxTap = 256> class DelayAntialiasedCentered {
 private:
   static_assert(maxTap > 0 && maxTap % 2 == 0);
 
   static constexpr int minTimeSample = maxTap / 2 - 1;
 
-  Sample maxTime = 0;
-  Sample prevTime = 0;
+  Real maxTime = 0;
+  Real prevTime = 0;
   int wptr = 0;
-  std::vector<Sample> buf{maxTap, Sample(0)};
+  std::vector<Real> buf{maxTap, Real(0)};
 
 public:
-  void setup(size_t maxTimeSample)
+  void setup(Real maxTimeSample)
   {
-    maxTime = Sample(maxTimeSample);
-    buf.resize(std::max(size_t(maxTap), maxTimeSample + maxTap / 2 + 1));
+    maxTime = maxTimeSample;
+    buf.resize(std::max(size_t(maxTap), size_t(maxTime) + maxTap / 2 + 1));
   }
 
   void reset()
   {
     prevTime = 0;
     wptr = 0;
-    std::fill(buf.begin(), buf.end(), Sample(0));
+    std::fill(buf.begin(), buf.end(), Real(0));
   }
 
-  Sample process(Sample input, Sample timeInSample)
+  Real process(Real input, Real timeInSample)
   {
     const int size = int(buf.size());
 
@@ -396,78 +513,83 @@ public:
     // Shorten FIR filter to some even number length depending on `timeInSample`.
     const int localTap = std::clamp(2 * int(timeInSample), int(2), maxTap);
     const int halfTap = localTap / 2;
-    const Sample clamped = std::clamp(timeInSample, Sample(halfTap - 1), maxTime);
+    const Real clamped = std::clamp(timeInSample, Real(halfTap - 1), maxTime);
 
     // Set cutoff frequency.
-    const Sample timeDiff = std::abs(prevTime - clamped + Sample(1));
+    const Real timeDiff = std::abs(prevTime - clamped + Real(1));
     prevTime = clamped;
-    Sample cutoff = timeDiff <= Sample(1) ? Sample(0.5) : std::exp2(-timeDiff);
+    const Real cutoff = timeDiff <= Real(1) ? Real(0.5) : std::exp2(-timeDiff);
 
     // Early exit for bypass (0 sample delay) case.
-    if (timeInSample <= 0) return input * Sample(2) * cutoff;
+    if (timeInSample <= 0) return input * Real(2) * cutoff;
+
+    const int timeInt = int(clamped);
+    const Real fraction = clamped - Real(timeInt);
+    const Real mid = fraction - halfTap;
 
     // Setup oscillator 1 for windowed sinc lowpass.
-    const int timeInt = int(clamped);
-    Sample fraction = clamped - Sample(timeInt);
-    const Sample mid = fraction - halfTap;
-
-    constexpr Sample pi = std::numbers::pi_v<Sample>;
-    const Sample o1_omega = Sample(2) * pi * cutoff;
-    const Sample o1_phi = mid * o1_omega;
-    const Sample o1_k = Sample(2) * std::cos(o1_omega);
-    Sample o1_u1 = std::sin(o1_phi - o1_omega);
-    Sample o1_u2 = std::sin(o1_phi - Sample(2) * o1_omega);
+    constexpr Real pi = std::numbers::pi_v<Real>;
+    const Real o1_omega = Real(2) * pi * cutoff;
+    const Real o1_k = Real(2) * std::cos(o1_omega);
+    Real o1_u1 = std::sin((mid - Real(1)) * o1_omega);
+    Real o1_u2 = std::sin((mid - Real(2)) * o1_omega);
 
     // Setup oscillator 2 for cosine-sum window function.
-    const Sample o2_omega = Sample(2) * pi / Sample(localTap + 1);
-    const Sample o2_phi = pi / Sample(2);
-    const Sample o2_k = Sample(2) * std::cos(o2_omega);
-    Sample o2_u1 = Sample(1); // == sin(o2_phi).
-    Sample o2_u2 = std::sin(o2_phi - o2_omega);
+    const Real o2_omega = Real(2) * pi / Real(maxTap + 1);
+    const Real o2_phi = o2_omega * Real(maxTap / 2 - halfTap);
+    const Real o2_k = Real(2) * std::cos(o2_omega);
+    Real o2_u1 = std::cos(o2_phi + o2_omega * (Real(-1) + fraction));
+    Real o2_u2 = std::cos(o2_phi + o2_omega * (Real(-2) + fraction));
 
     // The rest is convolution.
     int rptr = wptr - timeInt - halfTap;
     if (rptr < 0) rptr += size;
 
-    Sample sum = 0;
+    Real sum = 0;
+    const Real theta_scale = Real(2) * cutoff * pi;
     for (int i = 0; i < localTap; ++i) {
-      const Sample o1_u0 = o1_k * o1_u1 - o1_u2;
+      const Real o1_u0 = o1_k * o1_u1 - o1_u2;
       o1_u2 = o1_u1;
       o1_u1 = o1_u0;
 
-      const Sample o2_u0 = o2_k * o2_u1 - o2_u2;
+      const Real o2_u0 = o2_k * o2_u1 - o2_u2;
       o2_u2 = o2_u1;
       o2_u1 = o2_u0;
 
-      const Sample window = Sample(0.21747)
-        + o2_u0
-          * (Sample(-0.45325) + o2_u0 * (Sample(0.28256) + o2_u0 * Sample(-0.04672)));
+      const Real window = Real(0.21747)
+        + o2_u0 * (Real(-0.45325) + o2_u0 * (Real(0.28256) + o2_u0 * Real(-0.04672)));
 
-      const Sample x = Sample(i) + mid;
-      Sample sinc;
-      if (std::abs(x) <= Sample(0.1)) {
-        // Pade approximant of modified sinc when x is near 0.
-        Sample q = pi * cutoff * x;
-        q *= q;
-        sinc = Sample(2) / Sample(3) * cutoff * (Sample(15) - Sample(7) * q)
-          / (Sample(5) + q);
+      const Real x = Real(i) + mid;
+      const Real theta = theta_scale * x;
+      Real sinc;
+      if (std::abs(theta) <= Real(0.32)) [[unlikely]] {
+        const Real t2 = theta * theta;
+
+        Real y = Real(-1.0 / 39916800.0);
+        y = y * t2 + Real(+1.0 / 362880.0);
+        y = y * t2 + Real(-1.0 / 5040.0);
+        y = y * t2 + Real(+1.0 / 120.0);
+        y = y * t2 + Real(-1.0 / 6.0);
+        y = y * t2 + Real(+1.0);
+
+        sinc = Real(2) * cutoff * y;
       } else {
-        sinc = o1_u0 / pi / x;
+        sinc = o1_u0 / (pi * x);
       }
-
-      sum += window * sinc * buf[rptr];
+      sum += sinc * window * buf[rptr];
       if (++rptr >= size) rptr = 0;
     }
     return sum;
   }
 };
+
 ```
 
 以下は簡単な使用例です。
 
 ```c++
 auto processDelay(const std::vector<double> &in, const std::vector<double> &timeInSample) {
-  DelayBlackmanHarrisBiquadSine<double> delay;
+  DelayAntialiasedCentered<double> delay;
   delay.setup(48000);
 
   std::vector<double> out{in.size(), double(0)};
@@ -491,28 +613,52 @@ auto processDelay(const std::vector<double> &in, const std::vector<double> &time
 - [アンチエイリアシングを施したディレイの C++ 実装 (github.com)](https://github.com/ryukau/filter_notes/blob/master/fast_windowed_sinc/delay/delay.cpp)
 
 ### フィルタの長さが変わるときのノイズの低減
-以下のようにオシレータの初期設定を変更するとフィルタの長さが変わるときのノイズを減らせます。
+窓関数のオシレータを素朴に実装すると以下のように書けます。この形だとフィルタの長さ `localTap` に応じて窓関数を狭めます。
 
 ```c++
-// Setup oscillator 2 for cosine-sum window function.
-const Sample o2_omega = Sample(2) * pi / Sample(maxTap + 1);
-const Sample o2_phi = pi / Sample(2) + o2_omega * Sample(maxTap / 2 - halfTap);
-const Sample o2_k = Sample(2) * std::cos(o2_omega);
-Sample o2_u1 = std::sin(o2_phi);
-Sample o2_u2 = std::sin(o2_phi - o2_omega);
+// Setup oscillator 2 (o2). Cosine-sum window.
+const Real o2_omega = Real(2) * pi / Real(localTap + 1);
+const Real o2_phi = pi / Real(2);
+const Real o2_k = Real(2) * std::cos(o2_omega);
+Real o2_u1 = Real(1);
+Real o2_u2 = std::sin(o2_phi - o2_omega);
 ```
 
-この変更を行うとフィルタの長さが変わるときに窓関数の中央付近だけを切り出すようになります。以下は窓関数の切り詰めを示した図です。
+以下のようにオシレータの初期設定を変更するとフィルタの長さが変わるときのノイズを減らせます。 `maxTap >= localTap` かつ `halfTap = localTap / 2` です。
+
+```c++
+const Real o2_omega = Real(2) * pi / Real(maxTap + 1);
+const Real o2_phi = o2_omega * Real(maxTap / 2 - halfTap);
+const Real o2_k = Real(2) * std::cos(o2_omega);
+Real o2_u1 = std::cos(o2_phi);
+Real o2_u2 = std::cos(o2_phi - o2_omega);
+```
+
+上の変更を行うとフィルタの長さが変わるときに窓関数の中央付近だけに切り詰めるようになります。以下は窓関数の切り詰めを示した図です。
 
 <figure>
 <img src="./img/truncation_of_window.svg" alt="Plot of a truncation of Blackman-Harris window for smoother change of FIR length." style="padding-bottom: 12px;"/>
 </figure>
 
-以下はフィルタの長さが変わるときのノイズの低減の有無によるエイリアシングの違いを示したスペクトログラムです。上が低減なし、下が低減ありです。縦線が減っているのでポップノイズは減っていますが、エイリアシングは増えています。
+以下のように窓関数ピークを sinc 関数のピークにあわせるようなチューニングもノイズ低減に使えます。
+
+```c++
+Real o2_u1 = std::cos(o2_phi + o2_omega * (Real(-1) + fraction));
+Real o2_u2 = std::cos(o2_phi + o2_omega * (Real(-2) + fraction));
+```
+
+以下はフィルタの長さが変わるときの窓関数の扱いを変えたときのエイリアシングの違いを示したスペクトログラムです。
 
 <figure>
-<img src="./img/blackmanharris_full_vs_smooth.svg" alt="2 spectrograms to show the effect of the full window vs truncated window when reducing the FIR length." style="padding-bottom: 12px;"/>
+<img src="./img/blackmanharris_full_vs_smooth.svg" alt="4 spectrograms to show the effect of the full window vs truncated window when reducing the FIR length." style="padding-bottom: 12px;"/>
 </figure>
+
+- 左上: 窓関数を狭める実装。
+- 右上: 窓関数を切り詰めてピークを固定。
+- 左下: 窓関数を切り詰めてピークを sinc に追従。
+- 右上: 窓関数を切り詰めてピークを sinc に追従。 C++ 標準ライブラリの sin と cos を使用。
+
+窓関数を狭める実装は縦の明るい線が目立つので、ディレイ時間が短いときに変調によってポップノイズが乗りやすいことが見て取れます。窓関数を切り詰めると縦線が減っているのでポップノイズは減っていますが、エイリアシングは増えています。ピークを固定するとポップノイズが最も減ります。ピークを sinc に追従させるとエイリアシングが最も減りますが、ややポップノイズが増えます。 80 dB ほどの S/N かつ `double` で計算するなら、 biquad オシレータと標準数学関数の間で差は見られません。タップ数が 256 のときは最悪のケースで 1e-10 ほどの相対誤差が出るので、ダイナミックレンジが 200 dB を超えるようなときは標準ライブラリを使う必要が出てきます。
 
 ## 参考サイト
 - [Window function - Wikipedia](https://en.wikipedia.org/wiki/Window_function)

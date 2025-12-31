@@ -5,7 +5,7 @@
   <meta charset="utf-8" />
   <meta name="generator" content="pandoc" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
-      <meta name="dcterms.date" content="2025-11-22" />
+      <meta name="dcterms.date" content="2026-01-01" />
       <title>fast_windowed_sinc</title>
 
   <style>
@@ -412,7 +412,7 @@
     <hr>
     <a href="../index.html">インデックスに戻る</a>
         <p>
-      Update: 2025-11-22
+      Update: 2026-01-01
     </p>
             <details>
       <summary translate="yes">Table of Contents</summary>
@@ -427,8 +427,7 @@
         id="toc-正確な実装">正確な実装</a></li>
         <li><a href="#高速な実装" id="toc-高速な実装">高速な実装</a>
         <ul>
-        <li><a href="#誤差と実装のバリエーション"
-        id="toc-誤差と実装のバリエーション">誤差と実装のバリエーション</a></li>
+        <li><a href="#誤差" id="toc-誤差">誤差</a></li>
         </ul></li>
         <li><a href="#cosine-sum-窓" id="toc-cosine-sum-窓">Cosine-sum
         窓</a>
@@ -490,35 +489,123 @@
   \]</span></p>
   <p><span class="math inline">\(f_c\)</span> の単位は rad / 2π
   で、値の範囲が [0.0, 0.5] となるように正規化されてます。</p>
+  <p>以下は Python で素朴に実装した sinc
+  関数です。音のフィルタ設計ならこれでも十分です。</p>
+  <div class="sourceCode" id="cb1"><pre
+  class="sourceCode python"><code class="sourceCode python"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> modifiedSincNaive(x, fc):</span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> x <span class="op">==</span> <span class="dv">0</span>:</span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> <span class="dv">2</span> <span class="op">*</span> fc</span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> np.sin(np.pi <span class="op">*</span> <span class="dv">2</span> <span class="op">*</span> fc <span class="op">*</span> x) <span class="op">/</span> (np.pi <span class="op">*</span> x)</span></code></pre></div>
   <h2 id="正確な実装"><a href="#正確な実装" class="header-anchor"
   aria-hidden="true">正確な実装</a></h2>
   <p>以下は矩形窓を用いた windowed sinc フィルタを設計する Python 3
   のコードです。</p>
-  <div class="sourceCode" id="cb1"><pre
-  class="sourceCode python"><code class="sourceCode python"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> numpy <span class="im">as</span> np</span>
-<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> modifiedSinc(x, cutoff):</span>
-<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> x <span class="op">==</span> <span class="dv">0</span>:</span>
-<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> <span class="dv">2</span> <span class="op">*</span> cutoff</span>
-<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> np.sin(np.pi <span class="op">*</span> <span class="dv">2</span> <span class="op">*</span> cutoff <span class="op">*</span> x) <span class="op">/</span> (np.pi <span class="op">*</span> x)</span>
-<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> lowpassFir(length, cutoff, fractionSample):</span>
-<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a>    mid <span class="op">=</span> fractionSample <span class="op">-</span> (length <span class="op">//</span> <span class="dv">2</span> <span class="op">+</span> length <span class="op">%</span> <span class="dv">2</span>)</span>
-<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a>    fir <span class="op">=</span> np.zeros(length)</span>
-<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> i <span class="kw">in</span> <span class="bu">range</span>(length):</span>
-<span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a>        x <span class="op">=</span> i <span class="op">+</span> mid</span>
-<span id="cb1-13"><a href="#cb1-13" aria-hidden="true" tabindex="-1"></a>        fir[i] <span class="op">=</span> modifiedSinc(x, cutoff)</span>
-<span id="cb1-14"><a href="#cb1-14" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> fir</span></code></pre></div>
-  <p>以下は <code>lowpassFir</code> のパラメータの意味です。</p>
-  <ul>
-  <li><code>length</code> : FIR フィルタのタップ数。</li>
-  <li><code>cutoff</code> : 正規化されたカットオフ周波数。単位は rad /
-  2π 。範囲は [0, 0.5] 。</li>
-  <li><code>fractionSample</code> :
-  サンプル数であらわされた小数点以下の群遅延の量。範囲は [0, 1] 。</li>
-  </ul>
-  <p><code>fractionSample</code> は向きがあります。ここでは配列
-  <code>fir</code> のインデックスをさかのぼる方向に固定しています。</p>
+  <div class="sourceCode" id="cb2"><pre
+  class="sourceCode python"><code class="sourceCode python"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> numpy <span class="im">as</span> np</span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> modifiedSinc(x, cutoff):</span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a>    u <span class="op">=</span> <span class="dv">2</span> <span class="op">*</span> fc <span class="op">*</span> x</span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a>    theta <span class="op">=</span> np.pi <span class="op">*</span> u</span>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> <span class="bu">abs</span>(theta) <span class="op">&lt;</span> <span class="fl">0.32</span>: <span class="co"># x = 0 付近はテイラー展開で近似。</span></span>
+<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a>        t2 <span class="op">=</span> theta <span class="op">*</span> theta</span>
+<span id="cb2-9"><a href="#cb2-9" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-10"><a href="#cb2-10" aria-hidden="true" tabindex="-1"></a>        y <span class="op">=</span> <span class="op">-</span><span class="fl">1.0</span> <span class="op">/</span> <span class="fl">39916800.0</span></span>
+<span id="cb2-11"><a href="#cb2-11" aria-hidden="true" tabindex="-1"></a>        y <span class="op">=</span> y <span class="op">*</span> t2 <span class="op">+</span> (<span class="fl">1.0</span> <span class="op">/</span> <span class="fl">362880.0</span>)</span>
+<span id="cb2-12"><a href="#cb2-12" aria-hidden="true" tabindex="-1"></a>        y <span class="op">=</span> y <span class="op">*</span> t2 <span class="op">-</span> (<span class="fl">1.0</span> <span class="op">/</span> <span class="fl">5040.0</span>)</span>
+<span id="cb2-13"><a href="#cb2-13" aria-hidden="true" tabindex="-1"></a>        y <span class="op">=</span> y <span class="op">*</span> t2 <span class="op">+</span> (<span class="fl">1.0</span> <span class="op">/</span> <span class="fl">120.0</span>)</span>
+<span id="cb2-14"><a href="#cb2-14" aria-hidden="true" tabindex="-1"></a>        y <span class="op">=</span> y <span class="op">*</span> t2 <span class="op">-</span> (<span class="fl">1.0</span> <span class="op">/</span> <span class="fl">6.0</span>)</span>
+<span id="cb2-15"><a href="#cb2-15" aria-hidden="true" tabindex="-1"></a>        y <span class="op">=</span> y <span class="op">*</span> t2 <span class="op">+</span> <span class="fl">1.0</span></span>
+<span id="cb2-16"><a href="#cb2-16" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-17"><a href="#cb2-17" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> <span class="dv">2</span> <span class="op">*</span> fc <span class="op">*</span> y</span>
+<span id="cb2-18"><a href="#cb2-18" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-19"><a href="#cb2-19" aria-hidden="true" tabindex="-1"></a>    <span class="co"># レンジリダクション。</span></span>
+<span id="cb2-20"><a href="#cb2-20" aria-hidden="true" tabindex="-1"></a>    k <span class="op">=</span> np.rint(u)</span>
+<span id="cb2-21"><a href="#cb2-21" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> (<span class="dv">1</span> <span class="op">-</span> <span class="dv">2</span> <span class="op">*</span> (k <span class="op">%</span> <span class="dv">2</span>)) <span class="op">*</span> np.sin(np.pi <span class="op">*</span> (u <span class="op">-</span> k)) <span class="op">/</span> (np.pi <span class="op">*</span> x)</span>
+<span id="cb2-22"><a href="#cb2-22" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-23"><a href="#cb2-23" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> lowpassFir(length, cutoff, fractionSample):</span>
+<span id="cb2-24"><a href="#cb2-24" aria-hidden="true" tabindex="-1"></a>    <span class="co">&quot;&quot;&quot;</span></span>
+<span id="cb2-25"><a href="#cb2-25" aria-hidden="true" tabindex="-1"></a><span class="co">    `length`         : FIR フィルタのタップ数。</span></span>
+<span id="cb2-26"><a href="#cb2-26" aria-hidden="true" tabindex="-1"></a><span class="co">    `cutoff`         : 正規化されたカットオフ周波数。単位は rad / 2π 。範囲は [0, 0.5] 。</span></span>
+<span id="cb2-27"><a href="#cb2-27" aria-hidden="true" tabindex="-1"></a><span class="co">    `fractionSample` : サンプル数であらわされた小数点以下の群遅延の量。範囲は [0, 1] 。</span></span>
+<span id="cb2-28"><a href="#cb2-28" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-29"><a href="#cb2-29" aria-hidden="true" tabindex="-1"></a><span class="co">    `fractionSample` の向きは、配列 `fir` のインデックスをさかのぼる方向に固定。</span></span>
+<span id="cb2-30"><a href="#cb2-30" aria-hidden="true" tabindex="-1"></a><span class="co">    &quot;&quot;&quot;</span></span>
+<span id="cb2-31"><a href="#cb2-31" aria-hidden="true" tabindex="-1"></a>    mid <span class="op">=</span> fractionSample <span class="op">-</span> (length <span class="op">//</span> <span class="dv">2</span> <span class="op">+</span> length <span class="op">%</span> <span class="dv">2</span>)</span>
+<span id="cb2-32"><a href="#cb2-32" aria-hidden="true" tabindex="-1"></a>    fir <span class="op">=</span> np.zeros(length)</span>
+<span id="cb2-33"><a href="#cb2-33" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> i <span class="kw">in</span> <span class="bu">range</span>(length):</span>
+<span id="cb2-34"><a href="#cb2-34" aria-hidden="true" tabindex="-1"></a>        x <span class="op">=</span> i <span class="op">+</span> mid</span>
+<span id="cb2-35"><a href="#cb2-35" aria-hidden="true" tabindex="-1"></a>        fir[i] <span class="op">=</span> modifiedSinc(x, cutoff)</span>
+<span id="cb2-36"><a href="#cb2-36" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> fir</span></code></pre></div>
+  <p><code>modifiedSinc</code>
+  のテイラー展開は以下の形をしています。</p>
+  <p><span class="math display">\[
+  \begin{aligned}
+  \mathrm{sinc}(x, f_c)
+  &amp;\approx
+  2 f_c \sum_i (-1)^i \frac{(2 f_c \pi x)^{2i}}{(2 i + 1)!} \\
+  &amp;=
+  2 f_c \left(
+    1
+    -\frac{u^{2}}{3!}
+    +\frac{u^{4}}{5!}
+    -\frac{u^{6}}{7!}
+    +\frac{u^{8}}{9!}
+    -\frac{u^{10}}{11!}
+    \dots
+  \right), \quad u = 2 f_c \pi x.
+  \end{aligned}
+  \]</span></p>
+  <p><code>modifiedSinc</code> では 0 の周りを広めにカバーするために 10
+  次のテイラー展開を使っています。<a
+  href="https://mathworld.wolfram.com/TaylorSeries.html">テイラー展開の誤差は近似式に現れない、最も次数の高い項から求められます</a>。したがってテイラー展開への分岐点は
+  12 次の項と、マシンイプシロン <span
+  class="math inline">\(\epsilon\)</span> からなる以下の不等式を <span
+  class="math inline">\(u\)</span> について解けば得られます。</p>
+  <p><span class="math display">\[
+  \dfrac{u^{12}}{13!} &lt; \epsilon
+  \]</span></p>
+  <p>64-bit float では <span class="math inline">\(\epsilon =
+  2^{-52}\)</span> となり、不等式の解である <span
+  class="math inline">\(u &lt; (13! \; \epsilon)^{1/12}\)</span>
+  に代入するとおよそ <code>0.32</code>
+  となります。この広さは以降の高速な実装で役に立ちます。</p>
+  <p>レンジリダクションによって理論上は正確になります。まずは sinc
+  関数を再掲します。</p>
+  <p><span class="math display">\[
+  \mathrm{sinc}(x, f_c) = \frac{\sin(2 \pi f_c x)}{\pi x}.
+  \]</span></p>
+  <p>レンジリダクションが入るのは <span
+  class="math inline">\(\sin\)</span>
+  の引数です。まず、コードと同様にレンジリダクションする前の係数を <span
+  class="math inline">\(u = 2 f_c x\)</span>
+  と置きます。また、レンジリダクションされた値を <span
+  class="math inline">\(r = u - k\)</span> と置きます。 <span
+  class="math inline">\(k\)</span> はコード中の <code>k</code>
+  と対応しています。そして、浮動小数点数であらわされた <span
+  class="math inline">\(\pi\)</span> には丸め誤差 <span
+  class="math inline">\(\delta\)</span> があるので <span
+  class="math inline">\(\pi \approx \pi + \delta\)</span>
+  となります。ここで <span class="math inline">\(\sin\)</span>
+  の引数である <span class="math inline">\(\pi u\)</span> あるいは <span
+  class="math inline">\(\pi r\)</span>
+  に誤差を含めると以下のように書けます。</p>
+  <p><span class="math display">\[
+  \begin{aligned}
+  \pi u &amp;\approx (\pi + \delta) u &amp;&amp; = \pi u + \delta u. \\
+  \pi r &amp;\approx (\pi + \delta) r &amp;&amp; = \pi r + \delta r. \\
+  \end{aligned}
+  \]</span></p>
+  <p>ここで <span class="math inline">\(r\)</span> の定義より <span
+  class="math inline">\(|u| \geq |r|\)</span> なので、 <span
+  class="math inline">\(|\delta u| \geq |\delta r|\)</span> となり、
+  <span class="math inline">\(|u| &gt; |r|\)</span>
+  なら誤差が減ると言えます。</p>
+  <p>レンジリダクションを行うと <code>x = n / (2 * cutoff)</code>
+  のときに 0
+  を出力するケースが増えます。厳密には浮動小数点によって丸められた
+  <code>x = n / (2 * cutoff)</code> を <code>modifiedSinc</code>
+  に代入しても 0 とはならないことがほとんどです。</p>
   <h2 id="高速な実装"><a href="#高速な実装" class="header-anchor"
   aria-hidden="true">高速な実装</a></h2>
   <p>以下は biquad オシレータと呼ばれる再帰的に sin
@@ -526,94 +613,203 @@
   で書いていますが、特に CPython では <code>for</code>
   が遅いので高速化の恩恵は薄いです。 C++ による実装は「<a
   href="#ディレイのアンチエイリアシング">ディレイのアンチエイリアシング</a>」を参照してください。</p>
-  <div class="sourceCode" id="cb2"><pre
-  class="sourceCode python"><code class="sourceCode python"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> lowpassFirBiquadPede(length: <span class="bu">int</span>, cutoff: <span class="bu">float</span>, fractionSample: <span class="bu">float</span>):</span>
-<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a>    mid <span class="op">=</span> fractionSample <span class="op">-</span> length <span class="op">//</span> <span class="dv">2</span> <span class="op">-</span> length <span class="op">%</span> <span class="dv">2</span></span>
-<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a>    omega <span class="op">=</span> <span class="dv">2</span> <span class="op">*</span> np.pi <span class="op">*</span> cutoff</span>
-<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a>    phi <span class="op">=</span> mid <span class="op">*</span> omega</span>
-<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a>    k <span class="op">=</span> <span class="dv">2</span> <span class="op">*</span> np.cos(omega)</span>
-<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a>    u1 <span class="op">=</span> np.sin(phi <span class="op">-</span> omega)</span>
-<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a>    u2 <span class="op">=</span> np.sin(phi <span class="op">-</span> <span class="dv">2</span> <span class="op">*</span> omega)</span>
-<span id="cb2-9"><a href="#cb2-9" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb2-10"><a href="#cb2-10" aria-hidden="true" tabindex="-1"></a>    fir <span class="op">=</span> np.zeros(length)</span>
-<span id="cb2-11"><a href="#cb2-11" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> i <span class="kw">in</span> <span class="bu">range</span>(length):</span>
-<span id="cb2-12"><a href="#cb2-12" aria-hidden="true" tabindex="-1"></a>        u0 <span class="op">=</span> k <span class="op">*</span> u1 <span class="op">-</span> u2</span>
-<span id="cb2-13"><a href="#cb2-13" aria-hidden="true" tabindex="-1"></a>        u2 <span class="op">=</span> u1</span>
-<span id="cb2-14"><a href="#cb2-14" aria-hidden="true" tabindex="-1"></a>        u1 <span class="op">=</span> u0</span>
-<span id="cb2-15"><a href="#cb2-15" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb2-16"><a href="#cb2-16" aria-hidden="true" tabindex="-1"></a>        x <span class="op">=</span> i <span class="op">+</span> mid</span>
-<span id="cb2-17"><a href="#cb2-17" aria-hidden="true" tabindex="-1"></a>        <span class="cf">if</span> <span class="bu">abs</span>(x) <span class="op">&lt;</span> <span class="fl">0.1</span>:</span>
-<span id="cb2-18"><a href="#cb2-18" aria-hidden="true" tabindex="-1"></a>            q <span class="op">=</span> np.pi <span class="op">*</span> cutoff <span class="op">*</span> x</span>
-<span id="cb2-19"><a href="#cb2-19" aria-hidden="true" tabindex="-1"></a>            q <span class="op">*=</span> q</span>
-<span id="cb2-20"><a href="#cb2-20" aria-hidden="true" tabindex="-1"></a>            fir[i] <span class="op">=</span> (<span class="dv">2</span> <span class="op">/</span> <span class="dv">3</span>) <span class="op">*</span> cutoff <span class="op">*</span> (<span class="dv">15</span> <span class="op">-</span> <span class="dv">7</span> <span class="op">*</span> q) <span class="op">/</span> (<span class="dv">5</span> <span class="op">+</span> q)</span>
-<span id="cb2-21"><a href="#cb2-21" aria-hidden="true" tabindex="-1"></a>        <span class="cf">else</span>:</span>
-<span id="cb2-22"><a href="#cb2-22" aria-hidden="true" tabindex="-1"></a>            fir[i] <span class="op">=</span> u0 <span class="op">/</span> (np.pi <span class="op">*</span> x)</span>
-<span id="cb2-23"><a href="#cb2-23" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> fir</span></code></pre></div>
-  <p>再帰的な sin の計算に biquad オシレータを使っています。</p>
   <p><code>fractionSample</code> が 0 または 1 に近いときに
-  <code>x == 0</code> の周りで値がおかしくなるので、
-  <code>if abs(x) &lt; 0.1</code> の分岐を設けて <a
-  href="https://en.wikipedia.org/wiki/Pad%C3%A9_approximant">Padé
-  approximant</a> での計算に切り替えています。分岐での近似式は以下の <a
-  href="https://maxima.sourceforge.io/">Maxima</a>
-  のコードから出力されたものです。</p>
+  <code>x == 0</code>
+  の周りで値がおかしくなるので、テイラー展開への分岐は必須です。分岐の幅が
+  <code>±0.32</code>
+  と広いのはおかしくなる部分を完全にカバーするためです。</p>
   <div class="sourceCode" id="cb3"><pre
-  class="sourceCode maxima"><code class="sourceCode maxima"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="cn">sinc</span>: <span class="fu">sin</span>(<span class="dv">2</span> * <span class="va">%pi</span> * <span class="cn">f_c</span> * <span class="cn">x</span>) / (<span class="va">%pi</span> * <span class="cn">x</span>);</span>
-<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a><span class="fu">pade</span>(<span class="fu">taylor</span>(<span class="cn">sinc</span>, <span class="cn">x</span>, <span class="dv">0</span>, <span class="dv">4</span>), <span class="dv">2</span>, <span class="dv">2</span>);</span></code></pre></div>
-  <p>以下は整理した出力です。</p>
-  <p><span class="math display">\[
-  \mathrm{sinc} (x, f_c) \approx \frac{2}{3} f_c \frac{15 - 7 (\pi f_c
-  x)^2}{5 + (\pi f_c x)^2},
-  \enspace \text{only when} \ x\ \text{is close to 0}.
-  \]</span></p>
-  <p>Padé approximant への分岐 <code>if abs(x) &lt; 0.1</code>
-  のしきい値 <code>0.1</code> は適当に決めた値です。適切な分岐先は
-  <code>cutoff</code> に応じて変わります。 <code>cutoff</code>
-  が低くなるときはしきい値を上げて、 Padé approximant
-  によって計算する範囲を広くしたほうが誤差が減る傾向があります。逆に
-  <code>cutoff</code> が正規化されたナイキスト周波数 <code>0.5</code>
-  に近いときは、しきい値を下げて <code>0.001</code>
-  あたりに設定すると誤差が減る傾向があります。 <code>cutoff</code>
-  に応じた適切なしきい値を調べるコードを以下のリンク先の
-  <code>findBranchingThreshold</code> に掲載しています。</p>
-  <ul>
-  <li><a
-  href="https://github.com/ryukau/filter_notes/blob/a08bb919d2c2c07e7e21561fd7e3ee12d4c055b2/fast_windowed_sinc/fast_sinc_error/error.cpp#L435-L523">二分探索でしきい値を調べる
-  C++ のコード (github.com)</a></li>
-  </ul>
-  <h3 id="誤差と実装のバリエーション"><a
-  href="#誤差と実装のバリエーション" class="header-anchor"
-  aria-hidden="true">誤差と実装のバリエーション</a></h3>
-  <p>以下は誤差が変わる定性的な要素の一覧です。</p>
-  <ul>
-  <li>コンパイラの最適化オプション</li>
-  <li>再帰的な sin の計算方法</li>
-  <li>初期位相の計算方法</li>
-  </ul>
+  class="sourceCode python"><code class="sourceCode python"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> lowpassFirBiquad(length: <span class="bu">int</span>, cutoff: <span class="bu">float</span>, fractionSample: <span class="bu">float</span>):</span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a>    mid <span class="op">=</span> fractionSample <span class="op">-</span> length <span class="op">//</span> <span class="dv">2</span> <span class="op">-</span> length <span class="op">%</span> <span class="dv">2</span></span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a>    omega <span class="op">=</span> <span class="dv">2</span> <span class="op">*</span> np.pi <span class="op">*</span> cutoff</span>
+<span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a>    k <span class="op">=</span> <span class="dv">2</span> <span class="op">*</span> np.cos(omega)</span>
+<span id="cb3-6"><a href="#cb3-6" aria-hidden="true" tabindex="-1"></a>    u1 <span class="op">=</span> np.sin((mid <span class="op">-</span> <span class="dv">1</span>) <span class="op">*</span> omega)</span>
+<span id="cb3-7"><a href="#cb3-7" aria-hidden="true" tabindex="-1"></a>    u2 <span class="op">=</span> np.sin((mid <span class="op">-</span> <span class="dv">2</span>) <span class="op">*</span> omega)</span>
+<span id="cb3-8"><a href="#cb3-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-9"><a href="#cb3-9" aria-hidden="true" tabindex="-1"></a>    fir <span class="op">=</span> np.zeros(length)</span>
+<span id="cb3-10"><a href="#cb3-10" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> i <span class="kw">in</span> <span class="bu">range</span>(length):</span>
+<span id="cb3-11"><a href="#cb3-11" aria-hidden="true" tabindex="-1"></a>        u0 <span class="op">=</span> k <span class="op">*</span> u1 <span class="op">-</span> u2</span>
+<span id="cb3-12"><a href="#cb3-12" aria-hidden="true" tabindex="-1"></a>        u2 <span class="op">=</span> u1</span>
+<span id="cb3-13"><a href="#cb3-13" aria-hidden="true" tabindex="-1"></a>        u1 <span class="op">=</span> u0</span>
+<span id="cb3-14"><a href="#cb3-14" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-15"><a href="#cb3-15" aria-hidden="true" tabindex="-1"></a>        x <span class="op">=</span> i <span class="op">+</span> mid</span>
+<span id="cb3-16"><a href="#cb3-16" aria-hidden="true" tabindex="-1"></a>        theta <span class="op">=</span> np.pi <span class="op">*</span> <span class="dv">2</span> <span class="op">*</span> cutoff <span class="op">*</span> x</span>
+<span id="cb3-17"><a href="#cb3-17" aria-hidden="true" tabindex="-1"></a>        <span class="cf">if</span> <span class="bu">abs</span>(theta) <span class="op">&lt;</span> <span class="fl">0.32</span>:</span>
+<span id="cb3-18"><a href="#cb3-18" aria-hidden="true" tabindex="-1"></a>            t2 <span class="op">=</span> theta <span class="op">*</span> theta</span>
+<span id="cb3-19"><a href="#cb3-19" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-20"><a href="#cb3-20" aria-hidden="true" tabindex="-1"></a>            y <span class="op">=</span> <span class="op">-</span><span class="fl">1.0</span> <span class="op">/</span> <span class="fl">39916800.0</span></span>
+<span id="cb3-21"><a href="#cb3-21" aria-hidden="true" tabindex="-1"></a>            y <span class="op">=</span> y <span class="op">*</span> t2 <span class="op">+</span> (<span class="fl">1.0</span> <span class="op">/</span> <span class="fl">362880.0</span>)</span>
+<span id="cb3-22"><a href="#cb3-22" aria-hidden="true" tabindex="-1"></a>            y <span class="op">=</span> y <span class="op">*</span> t2 <span class="op">-</span> (<span class="fl">1.0</span> <span class="op">/</span> <span class="fl">5040.0</span>)</span>
+<span id="cb3-23"><a href="#cb3-23" aria-hidden="true" tabindex="-1"></a>            y <span class="op">=</span> y <span class="op">*</span> t2 <span class="op">+</span> (<span class="fl">1.0</span> <span class="op">/</span> <span class="fl">120.0</span>)</span>
+<span id="cb3-24"><a href="#cb3-24" aria-hidden="true" tabindex="-1"></a>            y <span class="op">=</span> y <span class="op">*</span> t2 <span class="op">-</span> (<span class="fl">1.0</span> <span class="op">/</span> <span class="fl">6.0</span>)</span>
+<span id="cb3-25"><a href="#cb3-25" aria-hidden="true" tabindex="-1"></a>            y <span class="op">=</span> y <span class="op">*</span> t2 <span class="op">+</span> <span class="fl">1.0</span></span>
+<span id="cb3-26"><a href="#cb3-26" aria-hidden="true" tabindex="-1"></a>            fir[i] <span class="op">=</span> <span class="dv">2</span> <span class="op">*</span> cutoff <span class="op">*</span> y</span>
+<span id="cb3-27"><a href="#cb3-27" aria-hidden="true" tabindex="-1"></a>        <span class="cf">else</span>:</span>
+<span id="cb3-28"><a href="#cb3-28" aria-hidden="true" tabindex="-1"></a>            fir[i] <span class="op">=</span> u0 <span class="op">/</span> (np.pi <span class="op">*</span> x)</span>
+<span id="cb3-29"><a href="#cb3-29" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> fir</span></code></pre></div>
+  <h3 id="誤差"><a href="#誤差" class="header-anchor"
+  aria-hidden="true">誤差</a></h3>
   <p><code>/fp:fast</code> や <code>-ffast-math</code>
-  のような浮動小数点数の計算順序を入れ替えるコンパイラの最適化オプションを使うと、以下で検討するような計算方法の変更では誤差の低減が見込みにくくなります。したがって、以下、この節では
-  <code>/fp:fast</code> や <code>-ffast-math</code>
-  を使わないことを前提としています。</p>
+  のような浮動小数点数の計算順序を入れ替えるコンパイラの最適化オプションを使うと誤差が変わります。</p>
   <p>再帰的な sin の計算方法はいくつか種類があり、別記事の「 <a
   href="../recursive_sine/recursive_sine.html">sin, cos
   を反復的に計算するアルゴリズムのレシピ</a>」にレシピを載せています。簡単に調べたところでは
-  coupled form と呼ばれる形を使うと biquad よりは誤差が減ります。</p>
-  <p>再帰的な計算を行うので、初期位相の細かいずれによって誤差が変わります。例えば、上で紹介した
-  biquad オシレータを使った高速な実装は <code>u1</code> と
-  <code>u2</code> の計算において以下の形を使うことで、再帰的な sin
-  の計算精度を少し良くできます。</p>
+  coupled form と呼ばれる形を使うと biquad
+  よりは誤差が減ります。ただし、他のアルゴリズムに替えると biquad
+  よりは遅くなります。また、 <code>lowpassFirBiquad</code> の
+  <code>u1</code> と <code>u2</code> は「 sin, cos
+  を反復的に計算するアルゴリズムのレシピ」とは式の形を変えて初期位相のずれによる誤差を減らしています。</p>
+  <p>ループ内の誤差について検討します。方針としては 1
+  サンプルごとの位相の進みを求めて、フィルタのタップ数 <span
+  class="math inline">\(N\)</span>
+  から誤差の蓄積を計算できるようにします。</p>
+  <p>まず、誤差の元となるのは <code>k</code>
+  に加えられる丸め誤差です。真値を <span
+  class="math inline">\(k\)</span> とします。 <span
+  class="math inline">\(\omega = 2 \pi f_c\)</span> です。</p>
+  <p><span class="math display">\[
+  k = 2 \cos(\omega).
+  \]</span></p>
+  <p><span class="math inline">\(k\)</span> の式より真の周波数 <span
+  class="math inline">\(\omega\)</span> の式が得られます。</p>
+  <p><span class="math display">\[
+  \omega = \arccos\left(\frac{k}{2}\right).
+  \]</span></p>
+  <p>真の周波数 <span class="math inline">\(\omega\)</span>
+  から誤差のある周波数を引いて、 1 サンプルあたりの位相の誤差 <span
+  class="math inline">\(\Delta \omega\)</span> を求めます。誤差 <span
+  class="math inline">\(\epsilon\)</span> を <span
+  class="math inline">\(k\)</span> に加えています。</p>
+  <p><span class="math display">\[
+  \Delta \omega = \omega - \arccos\left( \frac{k + \epsilon}{2} \right).
+  \]</span></p>
+  <p>するとループカウンター <span class="math inline">\(n\)</span>
+  から位相のずれを計算する式が得られます。</p>
+  <p><span class="math display">\[
+  \Delta \phi[n] = n \times \Delta \omega.
+  \]</span></p>
+  <p><span class="math inline">\(N\)</span> を FIR
+  フィルタのタップ数とすると以下の式でざっくりとした誤差の上限を計算できます。ざっくりというのは式中でマシンイプシロン
+  <span class="math inline">\(\epsilon\)</span> としている値は、実際には
+  <span class="math inline">\(k\)</span>
+  の値に応じて変わる浮動小数点数の丸め誤差であり、一定ではないからです。</p>
+  <p><span class="math display">\[
+  \Delta \phi \approx N \times \left(
+    \omega - \arccos\left( \cos(\omega) + \frac{\epsilon}{2} \right)
+  \right).
+  \]</span></p>
+  <p>よりざっくりとした相対誤差の計算は以下の式で行えます。 <span
+  class="math inline">\(N\)</span> は FIR フィルタのタップ数です。</p>
+  <p><span class="math display">\[
+  \mathrm{relative\_error} \approx N \times
+  \frac{\epsilon}{\sin(\omega)}.
+  \]</span></p>
+  <p><span class="math inline">\(k\)</span> を <span
+  class="math inline">\(\omega\)</span> について微分すると <span
+  class="math inline">\(\dfrac{d k}{d \omega} = -2 \sin(\omega)\)</span>
+  となり、微分演算子について <span class="math inline">\(dk  =
+  \epsilon\)</span> と代入してしまえば <span class="math inline">\(d
+  \omega \approx \Delta \omega\)</span>
+  と近似できるというところから出てきています。</p>
+  <p>大まかな誤差を出します。 <span class="math inline">\(f_c =
+  \dfrac{ω}{2 π}\)</span> で、コード中の <code>cutoff</code>
+  と対応しています。 <span class="math inline">\(\epsilon\)</span> には
+  64-bit float のマシンイプシロンを代入しました。</p>
+  <table>
+  <colgroup>
+  <col style="width: 15%" />
+  <col style="width: 23%" />
+  <col style="width: 21%" />
+  <col style="width: 20%" />
+  <col style="width: 18%" />
+  </colgroup>
+  <thead>
+  <tr>
+  <th></th>
+  <th><span class="math inline">\(f_c = 0.0005\)</span></th>
+  <th><span class="math inline">\(f_c = 0.005\)</span></th>
+  <th><span class="math inline">\(f_c = 0.05\)</span></th>
+  <th><span class="math inline">\(f_c = 0.5\)</span></th>
+  </tr>
+  </thead>
+  <tbody>
+  <tr>
+  <td><span class="math inline">\(N = 4\)</span></td>
+  <td>2.01e-13</td>
+  <td>1.96e-14</td>
+  <td>8.88e-16</td>
+  <td>5.96e-08</td>
+  </tr>
+  <tr>
+  <td><span class="math inline">\(N = 8\)</span></td>
+  <td>4.02e-13</td>
+  <td>3.92e-14</td>
+  <td>1.77e-15</td>
+  <td>1.19e-07</td>
+  </tr>
+  <tr>
+  <td><span class="math inline">\(N = 16\)</span></td>
+  <td>8.04e-13</td>
+  <td>7.84e-14</td>
+  <td>3.55e-15</td>
+  <td>2.38e-07</td>
+  </tr>
+  <tr>
+  <td><span class="math inline">\(N = 32\)</span></td>
+  <td>1.60e-12</td>
+  <td>1.56e-13</td>
+  <td>7.10e-15</td>
+  <td>4.76e-07</td>
+  </tr>
+  <tr>
+  <td><span class="math inline">\(N = 64\)</span></td>
+  <td>3.21e-12</td>
+  <td>3.13e-13</td>
+  <td>1.42e-14</td>
+  <td>9.53e-07</td>
+  </tr>
+  <tr>
+  <td><span class="math inline">\(N = 128\)</span></td>
+  <td>6.43e-12</td>
+  <td>6.27e-13</td>
+  <td>2.84e-14</td>
+  <td>1.90e-06</td>
+  </tr>
+  <tr>
+  <td><span class="math inline">\(N = 256\)</span></td>
+  <td>1.28e-11</td>
+  <td>1.25e-12</td>
+  <td>5.68e-14</td>
+  <td>3.81e-06</td>
+  </tr>
+  </tbody>
+  </table>
+  <p>当然ですが <span class="math inline">\(N\)</span>
+  が増えると誤差が増えています。 <span
+  class="math inline">\(f_c\)</span> に対して U
+  字を描くような誤差となっています。ナイキスト周波数の <span
+  class="math inline">\(f_c = 0.5\)</span> で誤差が多く、間の 0.05
+  ではやや誤差が下がり、 0.005 から 0.0005
+  に向けてまた誤差が増えています。 <span class="math inline">\(f_c =
+  0.0005\)</span> は可聴域の下限 20 Hz
+  を音でよくあるサンプリング周波数の 48000 で除算した値に近いです
+  (<code>20/48000 ~= 0.0004</code>) 。</p>
+  <details>
+  <summary>
+  テーブルの計算に使った Python スクリプト
+  </summary>
   <div class="sourceCode" id="cb4"><pre
-  class="sourceCode python"><code class="sourceCode python"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="co"># 変形した k, u1, u2 の初期値設定。</span></span>
-<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a>cω <span class="op">=</span> np.cos(omega)</span>
-<span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a>sω <span class="op">=</span> np.sin(omega)</span>
-<span id="cb4-4"><a href="#cb4-4" aria-hidden="true" tabindex="-1"></a>cφ <span class="op">=</span> np.cos(phi)</span>
-<span id="cb4-5"><a href="#cb4-5" aria-hidden="true" tabindex="-1"></a>sφ <span class="op">=</span> np.sin(phi)</span>
-<span id="cb4-6"><a href="#cb4-6" aria-hidden="true" tabindex="-1"></a>k <span class="op">=</span> <span class="dv">2</span> <span class="op">*</span> cω</span>
-<span id="cb4-7"><a href="#cb4-7" aria-hidden="true" tabindex="-1"></a>u1 <span class="op">=</span> sφ <span class="op">*</span> cω <span class="op">-</span> cφ <span class="op">*</span> sω    <span class="co"># ~= sin(phi - omega), 加法定理。</span></span>
-<span id="cb4-8"><a href="#cb4-8" aria-hidden="true" tabindex="-1"></a>c2ω <span class="op">=</span> <span class="dv">2</span> <span class="op">*</span> cω <span class="op">*</span> cω <span class="op">-</span> <span class="dv">1</span>     <span class="co"># ~= cos(2 * omega), 倍角公式。</span></span>
-<span id="cb4-9"><a href="#cb4-9" aria-hidden="true" tabindex="-1"></a>s2ω <span class="op">=</span> <span class="dv">2</span> <span class="op">*</span> sω <span class="op">*</span> cω         <span class="co"># ~= sin(2 * omega), 倍角公式。</span></span>
-<span id="cb4-10"><a href="#cb4-10" aria-hidden="true" tabindex="-1"></a>u2 <span class="op">=</span> sφ <span class="op">*</span> c2ω <span class="op">-</span> cφ <span class="op">*</span> s2ω  <span class="co"># ~= sin(phi - 2 * omega), 加法定理。</span></span></code></pre></div>
+  class="sourceCode python"><code class="sourceCode python"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> numpy <span class="im">as</span> np</span>
+<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> errorFastSinc(length, cutoff, epsilon<span class="op">=</span>np.finfo(np.float64).eps):</span>
+<span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a>    omega <span class="op">=</span> <span class="dv">2</span> <span class="op">*</span> np.pi <span class="op">*</span> cutoff</span>
+<span id="cb4-4"><a href="#cb4-4" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> length <span class="op">*</span> (omega <span class="op">-</span> np.arccos(np.cos(omega) <span class="op">+</span> epsilon <span class="op">/</span> <span class="dv">2</span>))</span>
+<span id="cb4-5"><a href="#cb4-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-6"><a href="#cb4-6" aria-hidden="true" tabindex="-1"></a>length <span class="op">=</span> np.array([<span class="dv">4</span>, <span class="dv">8</span>, <span class="dv">16</span>, <span class="dv">32</span>, <span class="dv">64</span>, <span class="dv">128</span>, <span class="dv">256</span>])</span>
+<span id="cb4-7"><a href="#cb4-7" aria-hidden="true" tabindex="-1"></a>cutoff <span class="op">=</span> np.array([<span class="fl">5e-4</span>, <span class="fl">5e-3</span>, <span class="fl">5e-2</span>, <span class="fl">5e-1</span>])</span>
+<span id="cb4-8"><a href="#cb4-8" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> N <span class="kw">in</span> length:</span>
+<span id="cb4-9"><a href="#cb4-9" aria-hidden="true" tabindex="-1"></a>    <span class="bu">print</span>(errorFastSinc(N, cutoff))</span></code></pre></div>
+  </details>
   <h2 id="cosine-sum-窓"><a href="#cosine-sum-窓" class="header-anchor"
   aria-hidden="true">Cosine-sum 窓</a></h2>
   <p>再帰的な sin の計算を行うオシレータを 1 つ増やすことで、 <a
@@ -677,18 +873,17 @@
 <span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a>    isEven <span class="op">=</span> <span class="dv">1</span> <span class="op">-</span> length <span class="op">%</span> <span class="dv">2</span></span>
 <span id="cb6-3"><a href="#cb6-3" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb6-4"><a href="#cb6-4" aria-hidden="true" tabindex="-1"></a>    ω <span class="op">=</span> <span class="dv">2</span> <span class="op">*</span> np.pi <span class="op">/</span> <span class="bu">float</span>(length <span class="op">-</span> isEven)</span>
-<span id="cb6-5"><a href="#cb6-5" aria-hidden="true" tabindex="-1"></a>    φ <span class="op">=</span> np.pi <span class="op">/</span> <span class="dv">2</span></span>
-<span id="cb6-6"><a href="#cb6-6" aria-hidden="true" tabindex="-1"></a>    k <span class="op">=</span> <span class="dv">2</span> <span class="op">*</span> np.cos(ω)</span>
-<span id="cb6-7"><a href="#cb6-7" aria-hidden="true" tabindex="-1"></a>    u1 <span class="op">=</span> np.sin(φ <span class="op">-</span> ω)</span>
-<span id="cb6-8"><a href="#cb6-8" aria-hidden="true" tabindex="-1"></a>    u2 <span class="op">=</span> np.sin(φ <span class="op">-</span> <span class="dv">2</span> <span class="op">*</span> ω)</span>
-<span id="cb6-9"><a href="#cb6-9" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb6-10"><a href="#cb6-10" aria-hidden="true" tabindex="-1"></a>    window <span class="op">=</span> np.zeros(length)</span>
-<span id="cb6-11"><a href="#cb6-11" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> i <span class="kw">in</span> <span class="bu">range</span>(length):</span>
-<span id="cb6-12"><a href="#cb6-12" aria-hidden="true" tabindex="-1"></a>        u0 <span class="op">=</span> k <span class="op">*</span> u1 <span class="op">-</span> u2</span>
-<span id="cb6-13"><a href="#cb6-13" aria-hidden="true" tabindex="-1"></a>        u2 <span class="op">=</span> u1</span>
-<span id="cb6-14"><a href="#cb6-14" aria-hidden="true" tabindex="-1"></a>        u1 <span class="op">=</span> u0</span>
-<span id="cb6-15"><a href="#cb6-15" aria-hidden="true" tabindex="-1"></a>        window[i] <span class="op">=</span> <span class="fl">0.21747</span> <span class="op">+</span> u0 <span class="op">*</span> (<span class="op">-</span><span class="fl">0.45325</span> <span class="op">+</span> u0 <span class="op">*</span> (<span class="fl">0.28256</span> <span class="op">+</span> u0 <span class="op">*</span> <span class="op">-</span><span class="fl">0.04672</span>))</span>
-<span id="cb6-16"><a href="#cb6-16" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> window</span></code></pre></div>
+<span id="cb6-5"><a href="#cb6-5" aria-hidden="true" tabindex="-1"></a>    k <span class="op">=</span> <span class="dv">2</span> <span class="op">*</span> np.cos(ω)</span>
+<span id="cb6-6"><a href="#cb6-6" aria-hidden="true" tabindex="-1"></a>    u1 <span class="op">=</span> np.cos(<span class="op">-</span><span class="dv">1</span> <span class="op">*</span> ω)  <span class="co"># k と cos の角度が重複しているので簡略化できる。</span></span>
+<span id="cb6-7"><a href="#cb6-7" aria-hidden="true" tabindex="-1"></a>    u2 <span class="op">=</span> np.cos(<span class="op">-</span><span class="dv">2</span> <span class="op">*</span> ω)</span>
+<span id="cb6-8"><a href="#cb6-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb6-9"><a href="#cb6-9" aria-hidden="true" tabindex="-1"></a>    window <span class="op">=</span> np.zeros(length)</span>
+<span id="cb6-10"><a href="#cb6-10" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> i <span class="kw">in</span> <span class="bu">range</span>(length):</span>
+<span id="cb6-11"><a href="#cb6-11" aria-hidden="true" tabindex="-1"></a>        u0 <span class="op">=</span> k <span class="op">*</span> u1 <span class="op">-</span> u2</span>
+<span id="cb6-12"><a href="#cb6-12" aria-hidden="true" tabindex="-1"></a>        u2 <span class="op">=</span> u1</span>
+<span id="cb6-13"><a href="#cb6-13" aria-hidden="true" tabindex="-1"></a>        u1 <span class="op">=</span> u0</span>
+<span id="cb6-14"><a href="#cb6-14" aria-hidden="true" tabindex="-1"></a>        window[i] <span class="op">=</span> <span class="fl">0.21747</span> <span class="op">+</span> u0 <span class="op">*</span> (<span class="op">-</span><span class="fl">0.45325</span> <span class="op">+</span> u0 <span class="op">*</span> (<span class="fl">0.28256</span> <span class="op">+</span> u0 <span class="op">*</span> <span class="op">-</span><span class="fl">0.04672</span>))</span>
+<span id="cb6-15"><a href="#cb6-15" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> window</span></code></pre></div>
   <p>以下は windowed sinc フィルタの設計と同時に Blackman-Harris
   窓をかける実装です。上の <code>blackmanHarris</code> と、下の
   <code>lowpassBlackmanHarrisBiquad</code>
@@ -707,36 +902,42 @@
 <span id="cb7-6"><a href="#cb7-6" aria-hidden="true" tabindex="-1"></a>    o1_omega <span class="op">=</span> <span class="dv">2</span> <span class="op">*</span> np.pi <span class="op">*</span> cutoff</span>
 <span id="cb7-7"><a href="#cb7-7" aria-hidden="true" tabindex="-1"></a>    o1_phi <span class="op">=</span> mid <span class="op">*</span> o1_omega</span>
 <span id="cb7-8"><a href="#cb7-8" aria-hidden="true" tabindex="-1"></a>    o1_k <span class="op">=</span> <span class="dv">2</span> <span class="op">*</span> np.cos(o1_omega)</span>
-<span id="cb7-9"><a href="#cb7-9" aria-hidden="true" tabindex="-1"></a>    o1_u1 <span class="op">=</span> np.sin(o1_phi <span class="op">-</span> o1_omega)</span>
-<span id="cb7-10"><a href="#cb7-10" aria-hidden="true" tabindex="-1"></a>    o1_u2 <span class="op">=</span> np.sin(o1_phi <span class="op">-</span> <span class="dv">2</span> <span class="op">*</span> o1_omega)</span>
+<span id="cb7-9"><a href="#cb7-9" aria-hidden="true" tabindex="-1"></a>    o1_u1 <span class="op">=</span> np.sin((mid <span class="op">-</span> <span class="dv">1</span>) <span class="op">*</span> o1_omega)</span>
+<span id="cb7-10"><a href="#cb7-10" aria-hidden="true" tabindex="-1"></a>    o1_u2 <span class="op">=</span> np.sin((mid <span class="op">-</span> <span class="dv">2</span>) <span class="op">*</span> o1_omega)</span>
 <span id="cb7-11"><a href="#cb7-11" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb7-12"><a href="#cb7-12" aria-hidden="true" tabindex="-1"></a>    o2_omega <span class="op">=</span> <span class="dv">2</span> <span class="op">*</span> np.pi <span class="op">/</span> <span class="bu">float</span>(length <span class="op">+</span> isEven)</span>
-<span id="cb7-13"><a href="#cb7-13" aria-hidden="true" tabindex="-1"></a>    o2_phi <span class="op">=</span> np.pi <span class="op">/</span> <span class="dv">2</span></span>
-<span id="cb7-14"><a href="#cb7-14" aria-hidden="true" tabindex="-1"></a>    o2_k <span class="op">=</span> <span class="dv">2</span> <span class="op">*</span> np.cos(o2_omega)</span>
-<span id="cb7-15"><a href="#cb7-15" aria-hidden="true" tabindex="-1"></a>    o2_u1 <span class="op">=</span> np.sin(o2_phi <span class="op">-</span> (<span class="dv">1</span> <span class="op">-</span> isEven) <span class="op">*</span> o2_omega)</span>
-<span id="cb7-16"><a href="#cb7-16" aria-hidden="true" tabindex="-1"></a>    o2_u2 <span class="op">=</span> np.sin(o2_phi <span class="op">-</span> (<span class="dv">2</span> <span class="op">-</span> isEven) <span class="op">*</span> o2_omega)</span>
-<span id="cb7-17"><a href="#cb7-17" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb7-18"><a href="#cb7-18" aria-hidden="true" tabindex="-1"></a>    fir <span class="op">=</span> np.zeros(length)</span>
-<span id="cb7-19"><a href="#cb7-19" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> i <span class="kw">in</span> <span class="bu">range</span>(length):</span>
-<span id="cb7-20"><a href="#cb7-20" aria-hidden="true" tabindex="-1"></a>        o1_u0 <span class="op">=</span> o1_k <span class="op">*</span> o1_u1 <span class="op">-</span> o1_u2</span>
-<span id="cb7-21"><a href="#cb7-21" aria-hidden="true" tabindex="-1"></a>        o1_u2 <span class="op">=</span> o1_u1</span>
-<span id="cb7-22"><a href="#cb7-22" aria-hidden="true" tabindex="-1"></a>        o1_u1 <span class="op">=</span> o1_u0</span>
-<span id="cb7-23"><a href="#cb7-23" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb7-24"><a href="#cb7-24" aria-hidden="true" tabindex="-1"></a>        o2_u0 <span class="op">=</span> o2_k <span class="op">*</span> o2_u1 <span class="op">-</span> o2_u2</span>
-<span id="cb7-25"><a href="#cb7-25" aria-hidden="true" tabindex="-1"></a>        o2_u2 <span class="op">=</span> o2_u1</span>
-<span id="cb7-26"><a href="#cb7-26" aria-hidden="true" tabindex="-1"></a>        o2_u1 <span class="op">=</span> o2_u0</span>
-<span id="cb7-27"><a href="#cb7-27" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb7-28"><a href="#cb7-28" aria-hidden="true" tabindex="-1"></a>        x <span class="op">=</span> i <span class="op">+</span> mid</span>
-<span id="cb7-29"><a href="#cb7-29" aria-hidden="true" tabindex="-1"></a>        <span class="cf">if</span> <span class="bu">abs</span>(x) <span class="op">&lt;</span> <span class="fl">0.1</span>:</span>
-<span id="cb7-30"><a href="#cb7-30" aria-hidden="true" tabindex="-1"></a>            q <span class="op">=</span> np.pi <span class="op">*</span> cutoff <span class="op">*</span> x</span>
-<span id="cb7-31"><a href="#cb7-31" aria-hidden="true" tabindex="-1"></a>            q <span class="op">*=</span> q</span>
-<span id="cb7-32"><a href="#cb7-32" aria-hidden="true" tabindex="-1"></a>            fir[i] <span class="op">=</span> (<span class="dv">2</span> <span class="op">/</span> <span class="dv">3</span>) <span class="op">*</span> cutoff <span class="op">*</span> (<span class="dv">15</span> <span class="op">-</span> <span class="dv">7</span> <span class="op">*</span> q) <span class="op">/</span> (<span class="dv">5</span> <span class="op">+</span> q)</span>
-<span id="cb7-33"><a href="#cb7-33" aria-hidden="true" tabindex="-1"></a>        <span class="cf">else</span>:</span>
-<span id="cb7-34"><a href="#cb7-34" aria-hidden="true" tabindex="-1"></a>            fir[i] <span class="op">=</span> o1_u0 <span class="op">/</span> (np.pi <span class="op">*</span> x)</span>
-<span id="cb7-35"><a href="#cb7-35" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb7-36"><a href="#cb7-36" aria-hidden="true" tabindex="-1"></a>        window <span class="op">=</span> <span class="fl">0.21747</span> <span class="op">+</span> o2_u0 <span class="op">*</span> (<span class="op">-</span><span class="fl">0.45325</span> <span class="op">+</span> o2_u0 <span class="op">*</span> (<span class="fl">0.28256</span> <span class="op">+</span> o2_u0 <span class="op">*</span> <span class="op">-</span><span class="fl">0.04672</span>))</span>
-<span id="cb7-37"><a href="#cb7-37" aria-hidden="true" tabindex="-1"></a>        fir[i] <span class="op">*=</span> window</span>
-<span id="cb7-38"><a href="#cb7-38" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> fir</span></code></pre></div>
+<span id="cb7-13"><a href="#cb7-13" aria-hidden="true" tabindex="-1"></a>    o2_k <span class="op">=</span> <span class="dv">2</span> <span class="op">*</span> np.cos(o2_omega)</span>
+<span id="cb7-14"><a href="#cb7-14" aria-hidden="true" tabindex="-1"></a>    o2_u1 <span class="op">=</span> np.cos((isEven <span class="op">+</span> fractionSample <span class="op">-</span> <span class="dv">1</span>) <span class="op">*</span> o2_omega)</span>
+<span id="cb7-15"><a href="#cb7-15" aria-hidden="true" tabindex="-1"></a>    o2_u2 <span class="op">=</span> np.cos((isEven <span class="op">+</span> fractionSample <span class="op">-</span> <span class="dv">2</span>) <span class="op">*</span> o2_omega)</span>
+<span id="cb7-16"><a href="#cb7-16" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb7-17"><a href="#cb7-17" aria-hidden="true" tabindex="-1"></a>    fir <span class="op">=</span> np.zeros(length)</span>
+<span id="cb7-18"><a href="#cb7-18" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> i <span class="kw">in</span> <span class="bu">range</span>(length):</span>
+<span id="cb7-19"><a href="#cb7-19" aria-hidden="true" tabindex="-1"></a>        o1_u0 <span class="op">=</span> o1_k <span class="op">*</span> o1_u1 <span class="op">-</span> o1_u2</span>
+<span id="cb7-20"><a href="#cb7-20" aria-hidden="true" tabindex="-1"></a>        o1_u2 <span class="op">=</span> o1_u1</span>
+<span id="cb7-21"><a href="#cb7-21" aria-hidden="true" tabindex="-1"></a>        o1_u1 <span class="op">=</span> o1_u0</span>
+<span id="cb7-22"><a href="#cb7-22" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb7-23"><a href="#cb7-23" aria-hidden="true" tabindex="-1"></a>        o2_u0 <span class="op">=</span> o2_k <span class="op">*</span> o2_u1 <span class="op">-</span> o2_u2</span>
+<span id="cb7-24"><a href="#cb7-24" aria-hidden="true" tabindex="-1"></a>        o2_u2 <span class="op">=</span> o2_u1</span>
+<span id="cb7-25"><a href="#cb7-25" aria-hidden="true" tabindex="-1"></a>        o2_u1 <span class="op">=</span> o2_u0</span>
+<span id="cb7-26"><a href="#cb7-26" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb7-27"><a href="#cb7-27" aria-hidden="true" tabindex="-1"></a>        x <span class="op">=</span> i <span class="op">+</span> mid</span>
+<span id="cb7-28"><a href="#cb7-28" aria-hidden="true" tabindex="-1"></a>        theta <span class="op">=</span> np.pi <span class="op">*</span> <span class="dv">2</span> <span class="op">*</span> cutoff <span class="op">*</span> x</span>
+<span id="cb7-29"><a href="#cb7-29" aria-hidden="true" tabindex="-1"></a>        <span class="cf">if</span> <span class="bu">abs</span>(theta) <span class="op">&lt;</span> <span class="fl">0.32</span>:</span>
+<span id="cb7-30"><a href="#cb7-30" aria-hidden="true" tabindex="-1"></a>            t2 <span class="op">=</span> theta <span class="op">*</span> theta</span>
+<span id="cb7-31"><a href="#cb7-31" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb7-32"><a href="#cb7-32" aria-hidden="true" tabindex="-1"></a>            y <span class="op">=</span> <span class="op">-</span><span class="fl">1.0</span> <span class="op">/</span> <span class="fl">39916800.0</span></span>
+<span id="cb7-33"><a href="#cb7-33" aria-hidden="true" tabindex="-1"></a>            y <span class="op">=</span> y <span class="op">*</span> t2 <span class="op">+</span> (<span class="fl">1.0</span> <span class="op">/</span> <span class="fl">362880.0</span>)</span>
+<span id="cb7-34"><a href="#cb7-34" aria-hidden="true" tabindex="-1"></a>            y <span class="op">=</span> y <span class="op">*</span> t2 <span class="op">-</span> (<span class="fl">1.0</span> <span class="op">/</span> <span class="fl">5040.0</span>)</span>
+<span id="cb7-35"><a href="#cb7-35" aria-hidden="true" tabindex="-1"></a>            y <span class="op">=</span> y <span class="op">*</span> t2 <span class="op">+</span> (<span class="fl">1.0</span> <span class="op">/</span> <span class="fl">120.0</span>)</span>
+<span id="cb7-36"><a href="#cb7-36" aria-hidden="true" tabindex="-1"></a>            y <span class="op">=</span> y <span class="op">*</span> t2 <span class="op">-</span> (<span class="fl">1.0</span> <span class="op">/</span> <span class="fl">6.0</span>)</span>
+<span id="cb7-37"><a href="#cb7-37" aria-hidden="true" tabindex="-1"></a>            y <span class="op">=</span> y <span class="op">*</span> t2 <span class="op">+</span> <span class="fl">1.0</span></span>
+<span id="cb7-38"><a href="#cb7-38" aria-hidden="true" tabindex="-1"></a>            fir[i] <span class="op">=</span> <span class="dv">2</span> <span class="op">*</span> cutoff <span class="op">*</span> y</span>
+<span id="cb7-39"><a href="#cb7-39" aria-hidden="true" tabindex="-1"></a>        <span class="cf">else</span>:</span>
+<span id="cb7-40"><a href="#cb7-40" aria-hidden="true" tabindex="-1"></a>            fir[i] <span class="op">=</span> o1_u0 <span class="op">/</span> (np.pi <span class="op">*</span> x)</span>
+<span id="cb7-41"><a href="#cb7-41" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb7-42"><a href="#cb7-42" aria-hidden="true" tabindex="-1"></a>        window <span class="op">=</span> <span class="fl">0.21747</span> <span class="op">+</span> o2_u0 <span class="op">*</span> (<span class="op">-</span><span class="fl">0.45325</span> <span class="op">+</span> o2_u0 <span class="op">*</span> (<span class="fl">0.28256</span> <span class="op">+</span> o2_u0 <span class="op">*</span> <span class="op">-</span><span class="fl">0.04672</span>))</span>
+<span id="cb7-43"><a href="#cb7-43" aria-hidden="true" tabindex="-1"></a>        fir[i] <span class="op">*=</span> window</span>
+<span id="cb7-44"><a href="#cb7-44" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> fir</span></code></pre></div>
   <h3 id="他の-cosine-sum-窓"><a href="#他の-cosine-sum-窓"
   class="header-anchor" aria-hidden="true">他の cosine-sum 窓</a></h3>
   <p>他の cosine-sum 窓について、 Chebyshev 多項式を展開して <a
@@ -774,6 +975,13 @@
 <span id="cb9-3"><a href="#cb9-3" aria-hidden="true" tabindex="-1"></a>blackmanharris <span class="op">=</span> u0<span class="op">*</span>(u0<span class="op">*</span>(<span class="fl">0.28256</span> <span class="op">-</span> <span class="fl">0.04672</span><span class="op">*</span>u0) <span class="op">-</span> <span class="fl">0.45325</span>) <span class="op">+</span> <span class="fl">0.21747</span></span>
 <span id="cb9-4"><a href="#cb9-4" aria-hidden="true" tabindex="-1"></a>blackmannuttall <span class="op">=</span> u0<span class="op">*</span>(u0<span class="op">*</span>(<span class="fl">0.273199</span> <span class="op">-</span> <span class="fl">0.0425644</span><span class="op">*</span>u0) <span class="op">-</span> <span class="fl">0.4572542</span>) <span class="op">+</span> <span class="fl">0.2269824</span></span>
 <span id="cb9-5"><a href="#cb9-5" aria-hidden="true" tabindex="-1"></a>flattop <span class="op">=</span> u0<span class="op">*</span>(u0<span class="op">*</span>(u0<span class="op">*</span>(<span class="fl">0.055578944</span><span class="op">*</span>u0 <span class="op">-</span> <span class="fl">0.334315788</span>) <span class="op">+</span> <span class="fl">0.498947372</span>) <span class="op">-</span> <span class="fl">0.165894739</span>) <span class="op">-</span> <span class="fl">0.05473684</span></span></code></pre></div>
+  <p>Chebyshev 多項式の次数が高いときは <a
+  href="https://en.wikipedia.org/wiki/Clenshaw_algorithm#Special_case_for_Chebyshev_series">Clenshaw
+  アルゴリズム</a>を使うほうが高精度に計算できます。ただし演算数が増えるので、上記の次数の低い
+  cosine-sum 窓であれば Horner’s method で十分です。 Clenshaw
+  アルゴリズムの実装は <a
+  href="https://github.com/chebfun/chebfun/blob/master/%40chebtech/clenshaw.m">chebfun
+  の Matlab 実装</a>が参考になります。</p>
   <h2 id="ディレイのアンチエイリアシング"><a
   href="#ディレイのアンチエイリアシング" class="header-anchor"
   aria-hidden="true">ディレイのアンチエイリアシング</a></h2>
@@ -885,32 +1093,32 @@
   フィルタの長さは偶数に固定しています。 CPU 負荷を減らしたいときは
   <code>maxTap</code> を適当な偶数に減らしてください。</p>
   <div class="sourceCode" id="cb10"><pre
-  class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a><span class="kw">template</span><span class="op">&lt;</span><span class="kw">typename</span> Sample<span class="op">,</span> <span class="dt">int</span> maxTap <span class="op">=</span> <span class="dv">256</span><span class="op">&gt;</span> <span class="kw">class</span> DelayBlackmanHarrisBiquadSine <span class="op">{</span></span>
+  class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a><span class="kw">template</span><span class="op">&lt;</span><span class="kw">typename</span> Real<span class="op">,</span> <span class="dt">int</span> maxTap <span class="op">=</span> <span class="dv">256</span><span class="op">&gt;</span> <span class="kw">class</span> DelayAntialiasedCentered <span class="op">{</span></span>
 <span id="cb10-2"><a href="#cb10-2" aria-hidden="true" tabindex="-1"></a><span class="kw">private</span><span class="op">:</span></span>
 <span id="cb10-3"><a href="#cb10-3" aria-hidden="true" tabindex="-1"></a>  <span class="kw">static_assert</span><span class="op">(</span>maxTap <span class="op">&gt;</span> <span class="dv">0</span> <span class="op">&amp;&amp;</span> maxTap <span class="op">%</span> <span class="dv">2</span> <span class="op">==</span> <span class="dv">0</span><span class="op">);</span></span>
 <span id="cb10-4"><a href="#cb10-4" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb10-5"><a href="#cb10-5" aria-hidden="true" tabindex="-1"></a>  <span class="at">static</span> <span class="kw">constexpr</span> <span class="dt">int</span> minTimeSample <span class="op">=</span> maxTap <span class="op">/</span> <span class="dv">2</span> <span class="op">-</span> <span class="dv">1</span><span class="op">;</span></span>
 <span id="cb10-6"><a href="#cb10-6" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb10-7"><a href="#cb10-7" aria-hidden="true" tabindex="-1"></a>  Sample maxTime <span class="op">=</span> <span class="dv">0</span><span class="op">;</span></span>
-<span id="cb10-8"><a href="#cb10-8" aria-hidden="true" tabindex="-1"></a>  Sample prevTime <span class="op">=</span> <span class="dv">0</span><span class="op">;</span></span>
+<span id="cb10-7"><a href="#cb10-7" aria-hidden="true" tabindex="-1"></a>  Real maxTime <span class="op">=</span> <span class="dv">0</span><span class="op">;</span></span>
+<span id="cb10-8"><a href="#cb10-8" aria-hidden="true" tabindex="-1"></a>  Real prevTime <span class="op">=</span> <span class="dv">0</span><span class="op">;</span></span>
 <span id="cb10-9"><a href="#cb10-9" aria-hidden="true" tabindex="-1"></a>  <span class="dt">int</span> wptr <span class="op">=</span> <span class="dv">0</span><span class="op">;</span></span>
-<span id="cb10-10"><a href="#cb10-10" aria-hidden="true" tabindex="-1"></a>  <span class="bu">std::</span>vector<span class="op">&lt;</span>Sample<span class="op">&gt;</span> buf<span class="op">{</span>maxTap<span class="op">,</span> Sample<span class="op">(</span><span class="dv">0</span><span class="op">)};</span></span>
+<span id="cb10-10"><a href="#cb10-10" aria-hidden="true" tabindex="-1"></a>  <span class="bu">std::</span>vector<span class="op">&lt;</span>Real<span class="op">&gt;</span> buf<span class="op">{</span>maxTap<span class="op">,</span> Real<span class="op">(</span><span class="dv">0</span><span class="op">)};</span></span>
 <span id="cb10-11"><a href="#cb10-11" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb10-12"><a href="#cb10-12" aria-hidden="true" tabindex="-1"></a><span class="kw">public</span><span class="op">:</span></span>
-<span id="cb10-13"><a href="#cb10-13" aria-hidden="true" tabindex="-1"></a>  <span class="dt">void</span> setup<span class="op">(</span><span class="dt">size_t</span> maxTimeSample<span class="op">)</span></span>
+<span id="cb10-13"><a href="#cb10-13" aria-hidden="true" tabindex="-1"></a>  <span class="dt">void</span> setup<span class="op">(</span>Real maxTimeSample<span class="op">)</span></span>
 <span id="cb10-14"><a href="#cb10-14" aria-hidden="true" tabindex="-1"></a>  <span class="op">{</span></span>
-<span id="cb10-15"><a href="#cb10-15" aria-hidden="true" tabindex="-1"></a>    maxTime <span class="op">=</span> Sample<span class="op">(</span>maxTimeSample<span class="op">);</span></span>
-<span id="cb10-16"><a href="#cb10-16" aria-hidden="true" tabindex="-1"></a>    buf<span class="op">.</span>resize<span class="op">(</span><span class="bu">std::</span>max<span class="op">(</span><span class="dt">size_t</span><span class="op">(</span>maxTap<span class="op">),</span> maxTimeSample <span class="op">+</span> maxTap <span class="op">/</span> <span class="dv">2</span> <span class="op">+</span> <span class="dv">1</span><span class="op">));</span></span>
+<span id="cb10-15"><a href="#cb10-15" aria-hidden="true" tabindex="-1"></a>    maxTime <span class="op">=</span> maxTimeSample<span class="op">;</span></span>
+<span id="cb10-16"><a href="#cb10-16" aria-hidden="true" tabindex="-1"></a>    buf<span class="op">.</span>resize<span class="op">(</span><span class="bu">std::</span>max<span class="op">(</span><span class="dt">size_t</span><span class="op">(</span>maxTap<span class="op">),</span> <span class="dt">size_t</span><span class="op">(</span>maxTime<span class="op">)</span> <span class="op">+</span> maxTap <span class="op">/</span> <span class="dv">2</span> <span class="op">+</span> <span class="dv">1</span><span class="op">));</span></span>
 <span id="cb10-17"><a href="#cb10-17" aria-hidden="true" tabindex="-1"></a>  <span class="op">}</span></span>
 <span id="cb10-18"><a href="#cb10-18" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb10-19"><a href="#cb10-19" aria-hidden="true" tabindex="-1"></a>  <span class="dt">void</span> reset<span class="op">()</span></span>
 <span id="cb10-20"><a href="#cb10-20" aria-hidden="true" tabindex="-1"></a>  <span class="op">{</span></span>
 <span id="cb10-21"><a href="#cb10-21" aria-hidden="true" tabindex="-1"></a>    prevTime <span class="op">=</span> <span class="dv">0</span><span class="op">;</span></span>
 <span id="cb10-22"><a href="#cb10-22" aria-hidden="true" tabindex="-1"></a>    wptr <span class="op">=</span> <span class="dv">0</span><span class="op">;</span></span>
-<span id="cb10-23"><a href="#cb10-23" aria-hidden="true" tabindex="-1"></a>    <span class="bu">std::</span>fill<span class="op">(</span>buf<span class="op">.</span>begin<span class="op">(),</span> buf<span class="op">.</span>end<span class="op">(),</span> Sample<span class="op">(</span><span class="dv">0</span><span class="op">));</span></span>
+<span id="cb10-23"><a href="#cb10-23" aria-hidden="true" tabindex="-1"></a>    <span class="bu">std::</span>fill<span class="op">(</span>buf<span class="op">.</span>begin<span class="op">(),</span> buf<span class="op">.</span>end<span class="op">(),</span> Real<span class="op">(</span><span class="dv">0</span><span class="op">));</span></span>
 <span id="cb10-24"><a href="#cb10-24" aria-hidden="true" tabindex="-1"></a>  <span class="op">}</span></span>
 <span id="cb10-25"><a href="#cb10-25" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb10-26"><a href="#cb10-26" aria-hidden="true" tabindex="-1"></a>  Sample process<span class="op">(</span>Sample input<span class="op">,</span> Sample timeInSample<span class="op">)</span></span>
+<span id="cb10-26"><a href="#cb10-26" aria-hidden="true" tabindex="-1"></a>  Real process<span class="op">(</span>Real input<span class="op">,</span> Real timeInSample<span class="op">)</span></span>
 <span id="cb10-27"><a href="#cb10-27" aria-hidden="true" tabindex="-1"></a>  <span class="op">{</span></span>
 <span id="cb10-28"><a href="#cb10-28" aria-hidden="true" tabindex="-1"></a>    <span class="at">const</span> <span class="dt">int</span> size <span class="op">=</span> <span class="dt">int</span><span class="op">(</span>buf<span class="op">.</span>size<span class="op">());</span></span>
 <span id="cb10-29"><a href="#cb10-29" aria-hidden="true" tabindex="-1"></a></span>
@@ -921,75 +1129,79 @@
 <span id="cb10-34"><a href="#cb10-34" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Shorten FIR filter to some even number length depending on `timeInSample`.</span></span>
 <span id="cb10-35"><a href="#cb10-35" aria-hidden="true" tabindex="-1"></a>    <span class="at">const</span> <span class="dt">int</span> localTap <span class="op">=</span> <span class="bu">std::</span>clamp<span class="op">(</span><span class="dv">2</span> <span class="op">*</span> <span class="dt">int</span><span class="op">(</span>timeInSample<span class="op">),</span> <span class="dt">int</span><span class="op">(</span><span class="dv">2</span><span class="op">),</span> maxTap<span class="op">);</span></span>
 <span id="cb10-36"><a href="#cb10-36" aria-hidden="true" tabindex="-1"></a>    <span class="at">const</span> <span class="dt">int</span> halfTap <span class="op">=</span> localTap <span class="op">/</span> <span class="dv">2</span><span class="op">;</span></span>
-<span id="cb10-37"><a href="#cb10-37" aria-hidden="true" tabindex="-1"></a>    <span class="at">const</span> Sample clamped <span class="op">=</span> <span class="bu">std::</span>clamp<span class="op">(</span>timeInSample<span class="op">,</span> Sample<span class="op">(</span>halfTap <span class="op">-</span> <span class="dv">1</span><span class="op">),</span> maxTime<span class="op">);</span></span>
+<span id="cb10-37"><a href="#cb10-37" aria-hidden="true" tabindex="-1"></a>    <span class="at">const</span> Real clamped <span class="op">=</span> <span class="bu">std::</span>clamp<span class="op">(</span>timeInSample<span class="op">,</span> Real<span class="op">(</span>halfTap <span class="op">-</span> <span class="dv">1</span><span class="op">),</span> maxTime<span class="op">);</span></span>
 <span id="cb10-38"><a href="#cb10-38" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb10-39"><a href="#cb10-39" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Set cutoff frequency.</span></span>
-<span id="cb10-40"><a href="#cb10-40" aria-hidden="true" tabindex="-1"></a>    <span class="at">const</span> Sample timeDiff <span class="op">=</span> <span class="bu">std::</span>abs<span class="op">(</span>prevTime <span class="op">-</span> clamped <span class="op">+</span> Sample<span class="op">(</span><span class="dv">1</span><span class="op">));</span></span>
+<span id="cb10-40"><a href="#cb10-40" aria-hidden="true" tabindex="-1"></a>    <span class="at">const</span> Real timeDiff <span class="op">=</span> <span class="bu">std::</span>abs<span class="op">(</span>prevTime <span class="op">-</span> clamped <span class="op">+</span> Real<span class="op">(</span><span class="dv">1</span><span class="op">));</span></span>
 <span id="cb10-41"><a href="#cb10-41" aria-hidden="true" tabindex="-1"></a>    prevTime <span class="op">=</span> clamped<span class="op">;</span></span>
-<span id="cb10-42"><a href="#cb10-42" aria-hidden="true" tabindex="-1"></a>    Sample cutoff <span class="op">=</span> timeDiff <span class="op">&lt;=</span> Sample<span class="op">(</span><span class="dv">1</span><span class="op">)</span> <span class="op">?</span> Sample<span class="op">(</span><span class="fl">0.5</span><span class="op">)</span> <span class="op">:</span> <span class="bu">std::</span>exp2<span class="op">(-</span>timeDiff<span class="op">);</span></span>
+<span id="cb10-42"><a href="#cb10-42" aria-hidden="true" tabindex="-1"></a>    <span class="at">const</span> Real cutoff <span class="op">=</span> timeDiff <span class="op">&lt;=</span> Real<span class="op">(</span><span class="dv">1</span><span class="op">)</span> <span class="op">?</span> Real<span class="op">(</span><span class="fl">0.5</span><span class="op">)</span> <span class="op">:</span> <span class="bu">std::</span>exp2<span class="op">(-</span>timeDiff<span class="op">);</span></span>
 <span id="cb10-43"><a href="#cb10-43" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb10-44"><a href="#cb10-44" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Early exit for bypass (0 sample delay) case.</span></span>
-<span id="cb10-45"><a href="#cb10-45" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> <span class="op">(</span>timeInSample <span class="op">&lt;=</span> <span class="dv">0</span><span class="op">)</span> <span class="cf">return</span> input <span class="op">*</span> Sample<span class="op">(</span><span class="dv">2</span><span class="op">)</span> <span class="op">*</span> cutoff<span class="op">;</span></span>
+<span id="cb10-45"><a href="#cb10-45" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> <span class="op">(</span>timeInSample <span class="op">&lt;=</span> <span class="dv">0</span><span class="op">)</span> <span class="cf">return</span> input <span class="op">*</span> Real<span class="op">(</span><span class="dv">2</span><span class="op">)</span> <span class="op">*</span> cutoff<span class="op">;</span></span>
 <span id="cb10-46"><a href="#cb10-46" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb10-47"><a href="#cb10-47" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Setup oscillator 1 for windowed sinc lowpass.</span></span>
-<span id="cb10-48"><a href="#cb10-48" aria-hidden="true" tabindex="-1"></a>    <span class="at">const</span> <span class="dt">int</span> timeInt <span class="op">=</span> <span class="dt">int</span><span class="op">(</span>clamped<span class="op">);</span></span>
-<span id="cb10-49"><a href="#cb10-49" aria-hidden="true" tabindex="-1"></a>    Sample fraction <span class="op">=</span> clamped <span class="op">-</span> Sample<span class="op">(</span>timeInt<span class="op">);</span></span>
-<span id="cb10-50"><a href="#cb10-50" aria-hidden="true" tabindex="-1"></a>    <span class="at">const</span> Sample mid <span class="op">=</span> fraction <span class="op">-</span> halfTap<span class="op">;</span></span>
-<span id="cb10-51"><a href="#cb10-51" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb10-52"><a href="#cb10-52" aria-hidden="true" tabindex="-1"></a>    <span class="kw">constexpr</span> Sample pi <span class="op">=</span> <span class="bu">std::</span>numbers::pi_v<span class="op">&lt;</span>Sample<span class="op">&gt;;</span></span>
-<span id="cb10-53"><a href="#cb10-53" aria-hidden="true" tabindex="-1"></a>    <span class="at">const</span> Sample o1_omega <span class="op">=</span> Sample<span class="op">(</span><span class="dv">2</span><span class="op">)</span> <span class="op">*</span> pi <span class="op">*</span> cutoff<span class="op">;</span></span>
-<span id="cb10-54"><a href="#cb10-54" aria-hidden="true" tabindex="-1"></a>    <span class="at">const</span> Sample o1_phi <span class="op">=</span> mid <span class="op">*</span> o1_omega<span class="op">;</span></span>
-<span id="cb10-55"><a href="#cb10-55" aria-hidden="true" tabindex="-1"></a>    <span class="at">const</span> Sample o1_k <span class="op">=</span> Sample<span class="op">(</span><span class="dv">2</span><span class="op">)</span> <span class="op">*</span> <span class="bu">std::</span>cos<span class="op">(</span>o1_omega<span class="op">);</span></span>
-<span id="cb10-56"><a href="#cb10-56" aria-hidden="true" tabindex="-1"></a>    Sample o1_u1 <span class="op">=</span> <span class="bu">std::</span>sin<span class="op">(</span>o1_phi <span class="op">-</span> o1_omega<span class="op">);</span></span>
-<span id="cb10-57"><a href="#cb10-57" aria-hidden="true" tabindex="-1"></a>    Sample o1_u2 <span class="op">=</span> <span class="bu">std::</span>sin<span class="op">(</span>o1_phi <span class="op">-</span> Sample<span class="op">(</span><span class="dv">2</span><span class="op">)</span> <span class="op">*</span> o1_omega<span class="op">);</span></span>
-<span id="cb10-58"><a href="#cb10-58" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb10-59"><a href="#cb10-59" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Setup oscillator 2 for cosine-sum window function.</span></span>
-<span id="cb10-60"><a href="#cb10-60" aria-hidden="true" tabindex="-1"></a>    <span class="at">const</span> Sample o2_omega <span class="op">=</span> Sample<span class="op">(</span><span class="dv">2</span><span class="op">)</span> <span class="op">*</span> pi <span class="op">/</span> Sample<span class="op">(</span>localTap <span class="op">+</span> <span class="dv">1</span><span class="op">);</span></span>
-<span id="cb10-61"><a href="#cb10-61" aria-hidden="true" tabindex="-1"></a>    <span class="at">const</span> Sample o2_phi <span class="op">=</span> pi <span class="op">/</span> Sample<span class="op">(</span><span class="dv">2</span><span class="op">);</span></span>
-<span id="cb10-62"><a href="#cb10-62" aria-hidden="true" tabindex="-1"></a>    <span class="at">const</span> Sample o2_k <span class="op">=</span> Sample<span class="op">(</span><span class="dv">2</span><span class="op">)</span> <span class="op">*</span> <span class="bu">std::</span>cos<span class="op">(</span>o2_omega<span class="op">);</span></span>
-<span id="cb10-63"><a href="#cb10-63" aria-hidden="true" tabindex="-1"></a>    Sample o2_u1 <span class="op">=</span> Sample<span class="op">(</span><span class="dv">1</span><span class="op">);</span> <span class="co">// == sin(o2_phi).</span></span>
-<span id="cb10-64"><a href="#cb10-64" aria-hidden="true" tabindex="-1"></a>    Sample o2_u2 <span class="op">=</span> <span class="bu">std::</span>sin<span class="op">(</span>o2_phi <span class="op">-</span> o2_omega<span class="op">);</span></span>
-<span id="cb10-65"><a href="#cb10-65" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb10-66"><a href="#cb10-66" aria-hidden="true" tabindex="-1"></a>    <span class="co">// The rest is convolution.</span></span>
-<span id="cb10-67"><a href="#cb10-67" aria-hidden="true" tabindex="-1"></a>    <span class="dt">int</span> rptr <span class="op">=</span> wptr <span class="op">-</span> timeInt <span class="op">-</span> halfTap<span class="op">;</span></span>
-<span id="cb10-68"><a href="#cb10-68" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> <span class="op">(</span>rptr <span class="op">&lt;</span> <span class="dv">0</span><span class="op">)</span> rptr <span class="op">+=</span> size<span class="op">;</span></span>
-<span id="cb10-69"><a href="#cb10-69" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb10-70"><a href="#cb10-70" aria-hidden="true" tabindex="-1"></a>    Sample sum <span class="op">=</span> <span class="dv">0</span><span class="op">;</span></span>
+<span id="cb10-47"><a href="#cb10-47" aria-hidden="true" tabindex="-1"></a>    <span class="at">const</span> <span class="dt">int</span> timeInt <span class="op">=</span> <span class="dt">int</span><span class="op">(</span>clamped<span class="op">);</span></span>
+<span id="cb10-48"><a href="#cb10-48" aria-hidden="true" tabindex="-1"></a>    <span class="at">const</span> Real fraction <span class="op">=</span> clamped <span class="op">-</span> Real<span class="op">(</span>timeInt<span class="op">);</span></span>
+<span id="cb10-49"><a href="#cb10-49" aria-hidden="true" tabindex="-1"></a>    <span class="at">const</span> Real mid <span class="op">=</span> fraction <span class="op">-</span> halfTap<span class="op">;</span></span>
+<span id="cb10-50"><a href="#cb10-50" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb10-51"><a href="#cb10-51" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Setup oscillator 1 for windowed sinc lowpass.</span></span>
+<span id="cb10-52"><a href="#cb10-52" aria-hidden="true" tabindex="-1"></a>    <span class="kw">constexpr</span> Real pi <span class="op">=</span> <span class="bu">std::</span>numbers::pi_v<span class="op">&lt;</span>Real<span class="op">&gt;;</span></span>
+<span id="cb10-53"><a href="#cb10-53" aria-hidden="true" tabindex="-1"></a>    <span class="at">const</span> Real o1_omega <span class="op">=</span> Real<span class="op">(</span><span class="dv">2</span><span class="op">)</span> <span class="op">*</span> pi <span class="op">*</span> cutoff<span class="op">;</span></span>
+<span id="cb10-54"><a href="#cb10-54" aria-hidden="true" tabindex="-1"></a>    <span class="at">const</span> Real o1_k <span class="op">=</span> Real<span class="op">(</span><span class="dv">2</span><span class="op">)</span> <span class="op">*</span> <span class="bu">std::</span>cos<span class="op">(</span>o1_omega<span class="op">);</span></span>
+<span id="cb10-55"><a href="#cb10-55" aria-hidden="true" tabindex="-1"></a>    Real o1_u1 <span class="op">=</span> <span class="bu">std::</span>sin<span class="op">((</span>mid <span class="op">-</span> Real<span class="op">(</span><span class="dv">1</span><span class="op">))</span> <span class="op">*</span> o1_omega<span class="op">);</span></span>
+<span id="cb10-56"><a href="#cb10-56" aria-hidden="true" tabindex="-1"></a>    Real o1_u2 <span class="op">=</span> <span class="bu">std::</span>sin<span class="op">((</span>mid <span class="op">-</span> Real<span class="op">(</span><span class="dv">2</span><span class="op">))</span> <span class="op">*</span> o1_omega<span class="op">);</span></span>
+<span id="cb10-57"><a href="#cb10-57" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb10-58"><a href="#cb10-58" aria-hidden="true" tabindex="-1"></a>    <span class="co">// Setup oscillator 2 for cosine-sum window function.</span></span>
+<span id="cb10-59"><a href="#cb10-59" aria-hidden="true" tabindex="-1"></a>    <span class="at">const</span> Real o2_omega <span class="op">=</span> Real<span class="op">(</span><span class="dv">2</span><span class="op">)</span> <span class="op">*</span> pi <span class="op">/</span> Real<span class="op">(</span>maxTap <span class="op">+</span> <span class="dv">1</span><span class="op">);</span></span>
+<span id="cb10-60"><a href="#cb10-60" aria-hidden="true" tabindex="-1"></a>    <span class="at">const</span> Real o2_phi <span class="op">=</span> o2_omega <span class="op">*</span> Real<span class="op">(</span>maxTap <span class="op">/</span> <span class="dv">2</span> <span class="op">-</span> halfTap<span class="op">);</span></span>
+<span id="cb10-61"><a href="#cb10-61" aria-hidden="true" tabindex="-1"></a>    <span class="at">const</span> Real o2_k <span class="op">=</span> Real<span class="op">(</span><span class="dv">2</span><span class="op">)</span> <span class="op">*</span> <span class="bu">std::</span>cos<span class="op">(</span>o2_omega<span class="op">);</span></span>
+<span id="cb10-62"><a href="#cb10-62" aria-hidden="true" tabindex="-1"></a>    Real o2_u1 <span class="op">=</span> <span class="bu">std::</span>cos<span class="op">(</span>o2_phi <span class="op">+</span> o2_omega <span class="op">*</span> <span class="op">(</span>Real<span class="op">(-</span><span class="dv">1</span><span class="op">)</span> <span class="op">+</span> fraction<span class="op">));</span></span>
+<span id="cb10-63"><a href="#cb10-63" aria-hidden="true" tabindex="-1"></a>    Real o2_u2 <span class="op">=</span> <span class="bu">std::</span>cos<span class="op">(</span>o2_phi <span class="op">+</span> o2_omega <span class="op">*</span> <span class="op">(</span>Real<span class="op">(-</span><span class="dv">2</span><span class="op">)</span> <span class="op">+</span> fraction<span class="op">));</span></span>
+<span id="cb10-64"><a href="#cb10-64" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb10-65"><a href="#cb10-65" aria-hidden="true" tabindex="-1"></a>    <span class="co">// The rest is convolution.</span></span>
+<span id="cb10-66"><a href="#cb10-66" aria-hidden="true" tabindex="-1"></a>    <span class="dt">int</span> rptr <span class="op">=</span> wptr <span class="op">-</span> timeInt <span class="op">-</span> halfTap<span class="op">;</span></span>
+<span id="cb10-67"><a href="#cb10-67" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> <span class="op">(</span>rptr <span class="op">&lt;</span> <span class="dv">0</span><span class="op">)</span> rptr <span class="op">+=</span> size<span class="op">;</span></span>
+<span id="cb10-68"><a href="#cb10-68" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb10-69"><a href="#cb10-69" aria-hidden="true" tabindex="-1"></a>    Real sum <span class="op">=</span> <span class="dv">0</span><span class="op">;</span></span>
+<span id="cb10-70"><a href="#cb10-70" aria-hidden="true" tabindex="-1"></a>    <span class="at">const</span> Real theta_scale <span class="op">=</span> Real<span class="op">(</span><span class="dv">2</span><span class="op">)</span> <span class="op">*</span> cutoff <span class="op">*</span> pi<span class="op">;</span></span>
 <span id="cb10-71"><a href="#cb10-71" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> <span class="op">(</span><span class="dt">int</span> i <span class="op">=</span> <span class="dv">0</span><span class="op">;</span> i <span class="op">&lt;</span> localTap<span class="op">;</span> <span class="op">++</span>i<span class="op">)</span> <span class="op">{</span></span>
-<span id="cb10-72"><a href="#cb10-72" aria-hidden="true" tabindex="-1"></a>      <span class="at">const</span> Sample o1_u0 <span class="op">=</span> o1_k <span class="op">*</span> o1_u1 <span class="op">-</span> o1_u2<span class="op">;</span></span>
+<span id="cb10-72"><a href="#cb10-72" aria-hidden="true" tabindex="-1"></a>      <span class="at">const</span> Real o1_u0 <span class="op">=</span> o1_k <span class="op">*</span> o1_u1 <span class="op">-</span> o1_u2<span class="op">;</span></span>
 <span id="cb10-73"><a href="#cb10-73" aria-hidden="true" tabindex="-1"></a>      o1_u2 <span class="op">=</span> o1_u1<span class="op">;</span></span>
 <span id="cb10-74"><a href="#cb10-74" aria-hidden="true" tabindex="-1"></a>      o1_u1 <span class="op">=</span> o1_u0<span class="op">;</span></span>
 <span id="cb10-75"><a href="#cb10-75" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb10-76"><a href="#cb10-76" aria-hidden="true" tabindex="-1"></a>      <span class="at">const</span> Sample o2_u0 <span class="op">=</span> o2_k <span class="op">*</span> o2_u1 <span class="op">-</span> o2_u2<span class="op">;</span></span>
+<span id="cb10-76"><a href="#cb10-76" aria-hidden="true" tabindex="-1"></a>      <span class="at">const</span> Real o2_u0 <span class="op">=</span> o2_k <span class="op">*</span> o2_u1 <span class="op">-</span> o2_u2<span class="op">;</span></span>
 <span id="cb10-77"><a href="#cb10-77" aria-hidden="true" tabindex="-1"></a>      o2_u2 <span class="op">=</span> o2_u1<span class="op">;</span></span>
 <span id="cb10-78"><a href="#cb10-78" aria-hidden="true" tabindex="-1"></a>      o2_u1 <span class="op">=</span> o2_u0<span class="op">;</span></span>
 <span id="cb10-79"><a href="#cb10-79" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb10-80"><a href="#cb10-80" aria-hidden="true" tabindex="-1"></a>      <span class="at">const</span> Sample window <span class="op">=</span> Sample<span class="op">(</span><span class="fl">0.21747</span><span class="op">)</span></span>
-<span id="cb10-81"><a href="#cb10-81" aria-hidden="true" tabindex="-1"></a>        <span class="op">+</span> o2_u0</span>
-<span id="cb10-82"><a href="#cb10-82" aria-hidden="true" tabindex="-1"></a>          <span class="op">*</span> <span class="op">(</span>Sample<span class="op">(-</span><span class="fl">0.45325</span><span class="op">)</span> <span class="op">+</span> o2_u0 <span class="op">*</span> <span class="op">(</span>Sample<span class="op">(</span><span class="fl">0.28256</span><span class="op">)</span> <span class="op">+</span> o2_u0 <span class="op">*</span> Sample<span class="op">(-</span><span class="fl">0.04672</span><span class="op">)));</span></span>
-<span id="cb10-83"><a href="#cb10-83" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb10-84"><a href="#cb10-84" aria-hidden="true" tabindex="-1"></a>      <span class="at">const</span> Sample x <span class="op">=</span> Sample<span class="op">(</span>i<span class="op">)</span> <span class="op">+</span> mid<span class="op">;</span></span>
-<span id="cb10-85"><a href="#cb10-85" aria-hidden="true" tabindex="-1"></a>      Sample sinc<span class="op">;</span></span>
-<span id="cb10-86"><a href="#cb10-86" aria-hidden="true" tabindex="-1"></a>      <span class="cf">if</span> <span class="op">(</span><span class="bu">std::</span>abs<span class="op">(</span>x<span class="op">)</span> <span class="op">&lt;=</span> Sample<span class="op">(</span><span class="fl">0.1</span><span class="op">))</span> <span class="op">{</span></span>
-<span id="cb10-87"><a href="#cb10-87" aria-hidden="true" tabindex="-1"></a>        <span class="co">// Pade approximant of modified sinc when x is near 0.</span></span>
-<span id="cb10-88"><a href="#cb10-88" aria-hidden="true" tabindex="-1"></a>        Sample q <span class="op">=</span> pi <span class="op">*</span> cutoff <span class="op">*</span> x<span class="op">;</span></span>
-<span id="cb10-89"><a href="#cb10-89" aria-hidden="true" tabindex="-1"></a>        q <span class="op">*=</span> q<span class="op">;</span></span>
-<span id="cb10-90"><a href="#cb10-90" aria-hidden="true" tabindex="-1"></a>        sinc <span class="op">=</span> Sample<span class="op">(</span><span class="dv">2</span><span class="op">)</span> <span class="op">/</span> Sample<span class="op">(</span><span class="dv">3</span><span class="op">)</span> <span class="op">*</span> cutoff <span class="op">*</span> <span class="op">(</span>Sample<span class="op">(</span><span class="dv">15</span><span class="op">)</span> <span class="op">-</span> Sample<span class="op">(</span><span class="dv">7</span><span class="op">)</span> <span class="op">*</span> q<span class="op">)</span></span>
-<span id="cb10-91"><a href="#cb10-91" aria-hidden="true" tabindex="-1"></a>          <span class="op">/</span> <span class="op">(</span>Sample<span class="op">(</span><span class="dv">5</span><span class="op">)</span> <span class="op">+</span> q<span class="op">);</span></span>
-<span id="cb10-92"><a href="#cb10-92" aria-hidden="true" tabindex="-1"></a>      <span class="op">}</span> <span class="cf">else</span> <span class="op">{</span></span>
-<span id="cb10-93"><a href="#cb10-93" aria-hidden="true" tabindex="-1"></a>        sinc <span class="op">=</span> o1_u0 <span class="op">/</span> pi <span class="op">/</span> x<span class="op">;</span></span>
-<span id="cb10-94"><a href="#cb10-94" aria-hidden="true" tabindex="-1"></a>      <span class="op">}</span></span>
+<span id="cb10-80"><a href="#cb10-80" aria-hidden="true" tabindex="-1"></a>      <span class="at">const</span> Real window <span class="op">=</span> Real<span class="op">(</span><span class="fl">0.21747</span><span class="op">)</span></span>
+<span id="cb10-81"><a href="#cb10-81" aria-hidden="true" tabindex="-1"></a>        <span class="op">+</span> o2_u0 <span class="op">*</span> <span class="op">(</span>Real<span class="op">(-</span><span class="fl">0.45325</span><span class="op">)</span> <span class="op">+</span> o2_u0 <span class="op">*</span> <span class="op">(</span>Real<span class="op">(</span><span class="fl">0.28256</span><span class="op">)</span> <span class="op">+</span> o2_u0 <span class="op">*</span> Real<span class="op">(-</span><span class="fl">0.04672</span><span class="op">)));</span></span>
+<span id="cb10-82"><a href="#cb10-82" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb10-83"><a href="#cb10-83" aria-hidden="true" tabindex="-1"></a>      <span class="at">const</span> Real x <span class="op">=</span> Real<span class="op">(</span>i<span class="op">)</span> <span class="op">+</span> mid<span class="op">;</span></span>
+<span id="cb10-84"><a href="#cb10-84" aria-hidden="true" tabindex="-1"></a>      <span class="at">const</span> Real theta <span class="op">=</span> theta_scale <span class="op">*</span> x<span class="op">;</span></span>
+<span id="cb10-85"><a href="#cb10-85" aria-hidden="true" tabindex="-1"></a>      Real sinc<span class="op">;</span></span>
+<span id="cb10-86"><a href="#cb10-86" aria-hidden="true" tabindex="-1"></a>      <span class="cf">if</span> <span class="op">(</span><span class="bu">std::</span>abs<span class="op">(</span>theta<span class="op">)</span> <span class="op">&lt;=</span> Real<span class="op">(</span><span class="fl">0.32</span><span class="op">))</span> <span class="op">[[</span><span class="at">unlikely</span><span class="op">]]</span> <span class="op">{</span></span>
+<span id="cb10-87"><a href="#cb10-87" aria-hidden="true" tabindex="-1"></a>        <span class="at">const</span> Real t2 <span class="op">=</span> theta <span class="op">*</span> theta<span class="op">;</span></span>
+<span id="cb10-88"><a href="#cb10-88" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb10-89"><a href="#cb10-89" aria-hidden="true" tabindex="-1"></a>        Real y <span class="op">=</span> Real<span class="op">(-</span><span class="fl">1.0</span> <span class="op">/</span> <span class="fl">39916800.0</span><span class="op">);</span></span>
+<span id="cb10-90"><a href="#cb10-90" aria-hidden="true" tabindex="-1"></a>        y <span class="op">=</span> y <span class="op">*</span> t2 <span class="op">+</span> Real<span class="op">(+</span><span class="fl">1.0</span> <span class="op">/</span> <span class="fl">362880.0</span><span class="op">);</span></span>
+<span id="cb10-91"><a href="#cb10-91" aria-hidden="true" tabindex="-1"></a>        y <span class="op">=</span> y <span class="op">*</span> t2 <span class="op">+</span> Real<span class="op">(-</span><span class="fl">1.0</span> <span class="op">/</span> <span class="fl">5040.0</span><span class="op">);</span></span>
+<span id="cb10-92"><a href="#cb10-92" aria-hidden="true" tabindex="-1"></a>        y <span class="op">=</span> y <span class="op">*</span> t2 <span class="op">+</span> Real<span class="op">(+</span><span class="fl">1.0</span> <span class="op">/</span> <span class="fl">120.0</span><span class="op">);</span></span>
+<span id="cb10-93"><a href="#cb10-93" aria-hidden="true" tabindex="-1"></a>        y <span class="op">=</span> y <span class="op">*</span> t2 <span class="op">+</span> Real<span class="op">(-</span><span class="fl">1.0</span> <span class="op">/</span> <span class="fl">6.0</span><span class="op">);</span></span>
+<span id="cb10-94"><a href="#cb10-94" aria-hidden="true" tabindex="-1"></a>        y <span class="op">=</span> y <span class="op">*</span> t2 <span class="op">+</span> Real<span class="op">(+</span><span class="fl">1.0</span><span class="op">);</span></span>
 <span id="cb10-95"><a href="#cb10-95" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb10-96"><a href="#cb10-96" aria-hidden="true" tabindex="-1"></a>      sum <span class="op">+=</span> window <span class="op">*</span> sinc <span class="op">*</span> buf<span class="op">[</span>rptr<span class="op">];</span></span>
-<span id="cb10-97"><a href="#cb10-97" aria-hidden="true" tabindex="-1"></a>      <span class="cf">if</span> <span class="op">(++</span>rptr <span class="op">&gt;=</span> size<span class="op">)</span> rptr <span class="op">=</span> <span class="dv">0</span><span class="op">;</span></span>
-<span id="cb10-98"><a href="#cb10-98" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
-<span id="cb10-99"><a href="#cb10-99" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> sum<span class="op">;</span></span>
-<span id="cb10-100"><a href="#cb10-100" aria-hidden="true" tabindex="-1"></a>  <span class="op">}</span></span>
-<span id="cb10-101"><a href="#cb10-101" aria-hidden="true" tabindex="-1"></a><span class="op">};</span></span></code></pre></div>
+<span id="cb10-96"><a href="#cb10-96" aria-hidden="true" tabindex="-1"></a>        sinc <span class="op">=</span> Real<span class="op">(</span><span class="dv">2</span><span class="op">)</span> <span class="op">*</span> cutoff <span class="op">*</span> y<span class="op">;</span></span>
+<span id="cb10-97"><a href="#cb10-97" aria-hidden="true" tabindex="-1"></a>      <span class="op">}</span> <span class="cf">else</span> <span class="op">{</span></span>
+<span id="cb10-98"><a href="#cb10-98" aria-hidden="true" tabindex="-1"></a>        sinc <span class="op">=</span> o1_u0 <span class="op">/</span> <span class="op">(</span>pi <span class="op">*</span> x<span class="op">);</span></span>
+<span id="cb10-99"><a href="#cb10-99" aria-hidden="true" tabindex="-1"></a>      <span class="op">}</span></span>
+<span id="cb10-100"><a href="#cb10-100" aria-hidden="true" tabindex="-1"></a>      sum <span class="op">+=</span> sinc <span class="op">*</span> window <span class="op">*</span> buf<span class="op">[</span>rptr<span class="op">];</span></span>
+<span id="cb10-101"><a href="#cb10-101" aria-hidden="true" tabindex="-1"></a>      <span class="cf">if</span> <span class="op">(++</span>rptr <span class="op">&gt;=</span> size<span class="op">)</span> rptr <span class="op">=</span> <span class="dv">0</span><span class="op">;</span></span>
+<span id="cb10-102"><a href="#cb10-102" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb10-103"><a href="#cb10-103" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> sum<span class="op">;</span></span>
+<span id="cb10-104"><a href="#cb10-104" aria-hidden="true" tabindex="-1"></a>  <span class="op">}</span></span>
+<span id="cb10-105"><a href="#cb10-105" aria-hidden="true" tabindex="-1"></a><span class="op">};</span></span></code></pre></div>
   <p>以下は簡単な使用例です。</p>
   <div class="sourceCode" id="cb11"><pre
   class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb11-1"><a href="#cb11-1" aria-hidden="true" tabindex="-1"></a><span class="kw">auto</span> processDelay<span class="op">(</span><span class="at">const</span> <span class="bu">std::</span>vector<span class="op">&lt;</span><span class="dt">double</span><span class="op">&gt;</span> <span class="op">&amp;</span>in<span class="op">,</span> <span class="at">const</span> <span class="bu">std::</span>vector<span class="op">&lt;</span><span class="dt">double</span><span class="op">&gt;</span> <span class="op">&amp;</span>timeInSample<span class="op">)</span> <span class="op">{</span></span>
-<span id="cb11-2"><a href="#cb11-2" aria-hidden="true" tabindex="-1"></a>  DelayBlackmanHarrisBiquadSine<span class="op">&lt;</span><span class="dt">double</span><span class="op">&gt;</span> delay<span class="op">;</span></span>
+<span id="cb11-2"><a href="#cb11-2" aria-hidden="true" tabindex="-1"></a>  DelayAntialiasedCentered<span class="op">&lt;</span><span class="dt">double</span><span class="op">&gt;</span> delay<span class="op">;</span></span>
 <span id="cb11-3"><a href="#cb11-3" aria-hidden="true" tabindex="-1"></a>  delay<span class="op">.</span>setup<span class="op">(</span><span class="dv">48000</span><span class="op">);</span></span>
 <span id="cb11-4"><a href="#cb11-4" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb11-5"><a href="#cb11-5" aria-hidden="true" tabindex="-1"></a>  <span class="bu">std::</span>vector<span class="op">&lt;</span><span class="dt">double</span><span class="op">&gt;</span> out<span class="op">{</span>in<span class="op">.</span>size<span class="op">(),</span> <span class="dt">double</span><span class="op">(</span><span class="dv">0</span><span class="op">)};</span></span>
@@ -1021,22 +1233,52 @@
   <h3 id="フィルタの長さが変わるときのノイズの低減"><a
   href="#フィルタの長さが変わるときのノイズの低減" class="header-anchor"
   aria-hidden="true">フィルタの長さが変わるときのノイズの低減</a></h3>
-  <p>以下のようにオシレータの初期設定を変更するとフィルタの長さが変わるときのノイズを減らせます。</p>
+  <p>窓関数のオシレータを素朴に実装すると以下のように書けます。この形だとフィルタの長さ
+  <code>localTap</code> に応じて窓関数を狭めます。</p>
   <div class="sourceCode" id="cb12"><pre
-  class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a><span class="co">// Setup oscillator 2 for cosine-sum window function.</span></span>
-<span id="cb12-2"><a href="#cb12-2" aria-hidden="true" tabindex="-1"></a><span class="at">const</span> Sample o2_omega <span class="op">=</span> Sample<span class="op">(</span><span class="dv">2</span><span class="op">)</span> <span class="op">*</span> pi <span class="op">/</span> Sample<span class="op">(</span>maxTap <span class="op">+</span> <span class="dv">1</span><span class="op">);</span></span>
-<span id="cb12-3"><a href="#cb12-3" aria-hidden="true" tabindex="-1"></a><span class="at">const</span> Sample o2_phi <span class="op">=</span> pi <span class="op">/</span> Sample<span class="op">(</span><span class="dv">2</span><span class="op">)</span> <span class="op">+</span> o2_omega <span class="op">*</span> Sample<span class="op">(</span>maxTap <span class="op">/</span> <span class="dv">2</span> <span class="op">-</span> halfTap<span class="op">);</span></span>
-<span id="cb12-4"><a href="#cb12-4" aria-hidden="true" tabindex="-1"></a><span class="at">const</span> Sample o2_k <span class="op">=</span> Sample<span class="op">(</span><span class="dv">2</span><span class="op">)</span> <span class="op">*</span> <span class="bu">std::</span>cos<span class="op">(</span>o2_omega<span class="op">);</span></span>
-<span id="cb12-5"><a href="#cb12-5" aria-hidden="true" tabindex="-1"></a>Sample o2_u1 <span class="op">=</span> <span class="bu">std::</span>sin<span class="op">(</span>o2_phi<span class="op">);</span></span>
-<span id="cb12-6"><a href="#cb12-6" aria-hidden="true" tabindex="-1"></a>Sample o2_u2 <span class="op">=</span> <span class="bu">std::</span>sin<span class="op">(</span>o2_phi <span class="op">-</span> o2_omega<span class="op">);</span></span></code></pre></div>
-  <p>この変更を行うとフィルタの長さが変わるときに窓関数の中央付近だけを切り出すようになります。以下は窓関数の切り詰めを示した図です。</p>
+  class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a><span class="co">// Setup oscillator 2 (o2). Cosine-sum window.</span></span>
+<span id="cb12-2"><a href="#cb12-2" aria-hidden="true" tabindex="-1"></a><span class="at">const</span> Real o2_omega <span class="op">=</span> Real<span class="op">(</span><span class="dv">2</span><span class="op">)</span> <span class="op">*</span> pi <span class="op">/</span> Real<span class="op">(</span>localTap <span class="op">+</span> <span class="dv">1</span><span class="op">);</span></span>
+<span id="cb12-3"><a href="#cb12-3" aria-hidden="true" tabindex="-1"></a><span class="at">const</span> Real o2_phi <span class="op">=</span> pi <span class="op">/</span> Real<span class="op">(</span><span class="dv">2</span><span class="op">);</span></span>
+<span id="cb12-4"><a href="#cb12-4" aria-hidden="true" tabindex="-1"></a><span class="at">const</span> Real o2_k <span class="op">=</span> Real<span class="op">(</span><span class="dv">2</span><span class="op">)</span> <span class="op">*</span> <span class="bu">std::</span>cos<span class="op">(</span>o2_omega<span class="op">);</span></span>
+<span id="cb12-5"><a href="#cb12-5" aria-hidden="true" tabindex="-1"></a>Real o2_u1 <span class="op">=</span> Real<span class="op">(</span><span class="dv">1</span><span class="op">);</span></span>
+<span id="cb12-6"><a href="#cb12-6" aria-hidden="true" tabindex="-1"></a>Real o2_u2 <span class="op">=</span> <span class="bu">std::</span>sin<span class="op">(</span>o2_phi <span class="op">-</span> o2_omega<span class="op">);</span></span></code></pre></div>
+  <p>以下のようにオシレータの初期設定を変更するとフィルタの長さが変わるときのノイズを減らせます。
+  <code>maxTap &gt;= localTap</code> かつ
+  <code>halfTap = localTap / 2</code> です。</p>
+  <div class="sourceCode" id="cb13"><pre
+  class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb13-1"><a href="#cb13-1" aria-hidden="true" tabindex="-1"></a><span class="at">const</span> Real o2_omega <span class="op">=</span> Real<span class="op">(</span><span class="dv">2</span><span class="op">)</span> <span class="op">*</span> pi <span class="op">/</span> Real<span class="op">(</span>maxTap <span class="op">+</span> <span class="dv">1</span><span class="op">);</span></span>
+<span id="cb13-2"><a href="#cb13-2" aria-hidden="true" tabindex="-1"></a><span class="at">const</span> Real o2_phi <span class="op">=</span> o2_omega <span class="op">*</span> Real<span class="op">(</span>maxTap <span class="op">/</span> <span class="dv">2</span> <span class="op">-</span> halfTap<span class="op">);</span></span>
+<span id="cb13-3"><a href="#cb13-3" aria-hidden="true" tabindex="-1"></a><span class="at">const</span> Real o2_k <span class="op">=</span> Real<span class="op">(</span><span class="dv">2</span><span class="op">)</span> <span class="op">*</span> <span class="bu">std::</span>cos<span class="op">(</span>o2_omega<span class="op">);</span></span>
+<span id="cb13-4"><a href="#cb13-4" aria-hidden="true" tabindex="-1"></a>Real o2_u1 <span class="op">=</span> <span class="bu">std::</span>cos<span class="op">(</span>o2_phi<span class="op">);</span></span>
+<span id="cb13-5"><a href="#cb13-5" aria-hidden="true" tabindex="-1"></a>Real o2_u2 <span class="op">=</span> <span class="bu">std::</span>cos<span class="op">(</span>o2_phi <span class="op">-</span> o2_omega<span class="op">);</span></span></code></pre></div>
+  <p>上の変更を行うとフィルタの長さが変わるときに窓関数の中央付近だけに切り詰めるようになります。以下は窓関数の切り詰めを示した図です。</p>
   <figure>
   <img src="./img/truncation_of_window.svg" alt="Plot of a truncation of Blackman-Harris window for smoother change of FIR length." style="padding-bottom: 12px;"/>
   </figure>
-  <p>以下はフィルタの長さが変わるときのノイズの低減の有無によるエイリアシングの違いを示したスペクトログラムです。上が低減なし、下が低減ありです。縦線が減っているのでポップノイズは減っていますが、エイリアシングは増えています。</p>
+  <p>以下のように窓関数ピークを sinc
+  関数のピークにあわせるようなチューニングもノイズ低減に使えます。</p>
+  <div class="sourceCode" id="cb14"><pre
+  class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb14-1"><a href="#cb14-1" aria-hidden="true" tabindex="-1"></a>Real o2_u1 <span class="op">=</span> <span class="bu">std::</span>cos<span class="op">(</span>o2_phi <span class="op">+</span> o2_omega <span class="op">*</span> <span class="op">(</span>Real<span class="op">(-</span><span class="dv">1</span><span class="op">)</span> <span class="op">+</span> fraction<span class="op">));</span></span>
+<span id="cb14-2"><a href="#cb14-2" aria-hidden="true" tabindex="-1"></a>Real o2_u2 <span class="op">=</span> <span class="bu">std::</span>cos<span class="op">(</span>o2_phi <span class="op">+</span> o2_omega <span class="op">*</span> <span class="op">(</span>Real<span class="op">(-</span><span class="dv">2</span><span class="op">)</span> <span class="op">+</span> fraction<span class="op">));</span></span></code></pre></div>
+  <p>以下はフィルタの長さが変わるときの窓関数の扱いを変えたときのエイリアシングの違いを示したスペクトログラムです。</p>
   <figure>
-  <img src="./img/blackmanharris_full_vs_smooth.svg" alt="2 spectrograms to show the effect of the full window vs truncated window when reducing the FIR length." style="padding-bottom: 12px;"/>
+  <img src="./img/blackmanharris_full_vs_smooth.svg" alt="4 spectrograms to show the effect of the full window vs truncated window when reducing the FIR length." style="padding-bottom: 12px;"/>
   </figure>
+  <ul>
+  <li>左上: 窓関数を狭める実装。</li>
+  <li>右上: 窓関数を切り詰めてピークを固定。</li>
+  <li>左下: 窓関数を切り詰めてピークを sinc に追従。</li>
+  <li>右上: 窓関数を切り詰めてピークを sinc に追従。 C++
+  標準ライブラリの sin と cos を使用。</li>
+  </ul>
+  <p>窓関数を狭める実装は縦の明るい線が目立つので、ディレイ時間が短いときに変調によってポップノイズが乗りやすいことが見て取れます。窓関数を切り詰めると縦線が減っているのでポップノイズは減っていますが、エイリアシングは増えています。ピークを固定するとポップノイズが最も減ります。ピークを
+  sinc
+  に追従させるとエイリアシングが最も減りますが、ややポップノイズが増えます。
+  80 dB ほどの S/N かつ <code>double</code> で計算するなら、 biquad
+  オシレータと標準数学関数の間で差は見られません。タップ数が 256
+  のときは最悪のケースで 1e-10
+  ほどの相対誤差が出るので、ダイナミックレンジが 200 dB
+  を超えるようなときは標準ライブラリを使う必要が出てきます。</p>
   <h2 id="参考サイト"><a href="#参考サイト" class="header-anchor"
   aria-hidden="true">参考サイト</a></h2>
   <ul>

@@ -24,7 +24,7 @@ def plotForEach(data):
 
 def plotCompare(data):
     ref = data["ref"]
-    fast = data["fast"]
+    fast = data["Biquad3"]
 
     nCutoff = len(ref)
     nCol = int(np.ceil(np.sqrt(nCutoff)))

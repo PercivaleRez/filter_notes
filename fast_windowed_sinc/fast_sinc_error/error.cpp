@@ -101,6 +101,28 @@ template<typename T> std::vector<T> windowedSincBiquad2(int length, T cutoff, T 
   return fir;
 }
 
+template<typename T> std::vector<T> windowedSincBiquad3(int length, T cutoff, T fraction)
+{
+  constexpr T pi = std::numbers::pi_v<T>;
+  const T mid = fraction - T(length / 2 + length % 2);
+
+  const T omega = T(2) * pi * cutoff;
+  const T k = T(2) * std::cos(omega);
+  T u1 = std::sin((mid - T(1)) * omega);
+  T u2 = std::sin((mid - T(2)) * omega);
+
+  std::vector<T> fir(length, T(0));
+  for (int i = 0; i < length; ++i) {
+    const T u0 = k * u1 - u2;
+    u2 = u1;
+    u1 = u0;
+
+    const T x = T(i) + mid;
+    fir[i] = x == 0 ? T(2) * cutoff : u0 / (pi * x);
+  }
+  return fir;
+}
+
 template<typename T> std::vector<T> windowedSincReinsch1(int length, T cutoff, T fraction)
 {
   constexpr T pi = std::numbers::pi_v<T>;
@@ -363,6 +385,7 @@ template<typename T> void writeJsonMaxError()
 
   ADD_DATA(Biquad1)
   ADD_DATA(Biquad2)
+  ADD_DATA(Biquad3)
   ADD_DATA(Reinsch1)
   ADD_DATA(Reinsch2)
   ADD_DATA(Magic1)
@@ -405,6 +428,7 @@ void writeJsonFirCoefficient()
 
   ADD_DATA(Biquad1)
   ADD_DATA(Biquad2)
+  ADD_DATA(Biquad3)
   ADD_DATA(Reinsch1)
   ADD_DATA(Reinsch2)
   ADD_DATA(Magic1)
@@ -438,7 +462,8 @@ template<typename T> void findBranchingThreshold()
   constexpr int length = 256;
   constexpr int nCutoff = 16;
 
-  auto isPadeBetter = [](int length, T fc, T frac) -> std::vector<T> {
+  auto isPadeBetter = [](int length, T fc, T frac) -> std::vector<T>
+  {
     const T x = frac <= T(0.5) ? frac : frac - T(1);
     const T target = x == 0 ? T(2) * fc : std::sin(T(2) * fc * pi * x) / (pi * x);
 
@@ -459,7 +484,8 @@ template<typename T> void findBranchingThreshold()
     return {T(errorFast > errorPade), errorFast, errorPade};
   };
 
-  auto printResult = [](int length, T fc, T branchingPoint, T e1, T e2) {
+  auto printResult = [](int length, T fc, T branchingPoint, T e1, T e2)
+  {
     std::cout << std::format(
       "{:>6} | {:>24} | {:>24} | {:>24} | {:>24}\n", length, fc, branchingPoint, e1, e2);
   };
@@ -524,9 +550,9 @@ template<typename T> void findBranchingThreshold()
 
 int main()
 {
-  // writeJsonFirCoefficient();
-  // writeJsonMaxError<float>();
-  // writeJsonMaxError<double>();
+  writeJsonFirCoefficient();
+  writeJsonMaxError<float>();
+  writeJsonMaxError<double>();
   findBranchingThreshold<double>();
   return 0;
 }
