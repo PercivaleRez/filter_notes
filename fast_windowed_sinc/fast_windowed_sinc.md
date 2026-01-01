@@ -89,23 +89,23 @@ $$
 &=
 2 f_c \left(
   1
-  -\frac{u^{2}}{3!}
-  +\frac{u^{4}}{5!}
-  -\frac{u^{6}}{7!}
-  +\frac{u^{8}}{9!}
-  -\frac{u^{10}}{11!}
+  -\frac{\theta^{2}}{3!}
+  +\frac{\theta^{4}}{5!}
+  -\frac{\theta^{6}}{7!}
+  +\frac{\theta^{8}}{9!}
+  -\frac{\theta^{10}}{11!}
   \dots
-\right), \quad u = 2 f_c \pi x.
+\right), \quad \theta = 2 f_c \pi x.
 \end{aligned}
 $$
 
-`modifiedSinc` では 0 の周りを広めにカバーするために 10 次のテイラー展開を使っています。[テイラー展開の誤差は近似式に現れない、最も次数の高い項から求められます](https://mathworld.wolfram.com/TaylorSeries.html)。したがってテイラー展開への分岐点は 12 次の項と、マシンイプシロン $\epsilon$ からなる以下の不等式を $u$ について解けば得られます。
+`modifiedSinc` では 0 の周りを広めにカバーするために 10 次のテイラー展開を使っています。[テイラー展開の誤差は近似式に現れない、最も次数の高い項から求められます](https://mathworld.wolfram.com/TaylorSeries.html)。したがってテイラー展開への分岐点は 12 次の項と、マシンイプシロン $\epsilon$ からなる以下の不等式を $\theta$ について解けば得られます。
 
 $$
-\dfrac{u^{12}}{13!} < \epsilon
+\dfrac{\theta^{12}}{13!} < \epsilon
 $$
 
-64-bit float では $\epsilon = 2^{-52}$ となり、不等式の解である $u < (13! \; \epsilon)^{1/12}$ に代入するとおよそ `0.32` となります。この広さは以降の高速な実装で役に立ちます。
+64-bit float では $\epsilon = 2^{-52}$ となり、不等式の解である $\theta < (13! \; \epsilon)^{1/12}$ に代入するとおよそ `0.32` となります。この広さは以降の高速な実装で役に立ちます。
 
 レンジリダクションによって理論上は正確になります。まずは sinc 関数を再掲します。
 

@@ -547,13 +547,13 @@
   &amp;=
   2 f_c \left(
     1
-    -\frac{u^{2}}{3!}
-    +\frac{u^{4}}{5!}
-    -\frac{u^{6}}{7!}
-    +\frac{u^{8}}{9!}
-    -\frac{u^{10}}{11!}
+    -\frac{\theta^{2}}{3!}
+    +\frac{\theta^{4}}{5!}
+    -\frac{\theta^{6}}{7!}
+    +\frac{\theta^{8}}{9!}
+    -\frac{\theta^{10}}{11!}
     \dots
-  \right), \quad u = 2 f_c \pi x.
+  \right), \quad \theta = 2 f_c \pi x.
   \end{aligned}
   \]</span></p>
   <p><code>modifiedSinc</code> では 0 の周りを広めにカバーするために 10
@@ -561,13 +561,13 @@
   href="https://mathworld.wolfram.com/TaylorSeries.html">テイラー展開の誤差は近似式に現れない、最も次数の高い項から求められます</a>。したがってテイラー展開への分岐点は
   12 次の項と、マシンイプシロン <span
   class="math inline">\(\epsilon\)</span> からなる以下の不等式を <span
-  class="math inline">\(u\)</span> について解けば得られます。</p>
+  class="math inline">\(\theta\)</span> について解けば得られます。</p>
   <p><span class="math display">\[
-  \dfrac{u^{12}}{13!} &lt; \epsilon
+  \dfrac{\theta^{12}}{13!} &lt; \epsilon
   \]</span></p>
   <p>64-bit float では <span class="math inline">\(\epsilon =
   2^{-52}\)</span> となり、不等式の解である <span
-  class="math inline">\(u &lt; (13! \; \epsilon)^{1/12}\)</span>
+  class="math inline">\(\theta &lt; (13! \; \epsilon)^{1/12}\)</span>
   に代入するとおよそ <code>0.32</code>
   となります。この広さは以降の高速な実装で役に立ちます。</p>
   <p>レンジリダクションによって理論上は正確になります。まずは sinc
